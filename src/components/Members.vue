@@ -572,26 +572,23 @@ const saveMember = async () => {
     console.log('invoke function:', invoke)
     console.log('typeof invoke:', typeof invoke)
     
-    // Prepare member data for backend
-    const memberData = {
-      etunimi: memberForm.value.etunimi,
-      sukunimi: memberForm.value.sukunimi,
-      henkilotunnus: null, // Removed as requested
+    // Prepare member data for backend - convert dates to strings
+    const memberDataForBackend = {
+      ...memberForm.value,
       syntymaaika: memberForm.value.syntymaaika ? memberForm.value.syntymaaika.toISOString().split('T')[0] : null,
-      puhelinnumero: memberForm.value.puhelinnumero || null,
-      sahkoposti: memberForm.value.sahkoposti || null,
-      osoite_id: 1, // TODO: Create address/household first and get real ID
       liittymispaiva: memberForm.value.liittymispaiva.toISOString().split('T')[0],
-      jasentyyppi: memberForm.value.jasentyyppi, // Keep capitalized - backend now accepts both
-      aktiivinen: memberForm.value.aktiivinen
+      henkilotunnus: null, // Removed as requested
     }
     
     if (editingMember.value) {
-      console.log('Calling update_member_with_address with id:', editingMember.value.id, 'member data:', memberForm.value)
-      await invoke('update_member_with_address', { id: editingMember.value.id, member_data: memberForm.value })
+      console.log('Calling update_member_with_address with id:', editingMember.value.id, 'member data:', memberDataForBackend)
+      await invoke('update_member_with_address', { 
+        id: editingMember.value.id, 
+        member_data: memberDataForBackend 
+      })
     } else {
-      console.log('Calling create_member_with_address with member data:', memberForm.value)
-      await invoke('create_member_with_address', { member_data: memberForm.value })
+      console.log('Calling create_member_with_address with member data:', memberDataForBackend)
+      await invoke('create_member_with_address', { member_data: memberDataForBackend })
     }
     await loadMembers()
     closeModal()
