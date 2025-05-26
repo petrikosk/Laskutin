@@ -627,36 +627,34 @@ const loadTaloudet = async () => {
 
 const loadMembers = async () => {
   try {
-    // TODO: Hae jäsenet backend:ista
-    // members.value = await invoke('get_members')
+    console.log('Loading members from backend...')
+    const membersData = await invoke('get_members')
+    console.log('Received members data:', membersData)
     
-    // Väliaikainen testidata
-    members.value = [
-      {
-        id: 1,
-        etunimi: 'Matti',
-        sukunimi: 'Korhonen',
-        henkilotunnus: '010180-123A',
-        puhelinnumero: '040-1234567',
-        sahkoposti: 'matti@example.com',
-        liittymispaiva: '2023-01-15',
-        jasentyyppi: 'Varsinainen',
-        aktiivinen: true,
-      },
-      {
-        id: 2,
-        etunimi: 'Maija',
-        sukunimi: 'Virtanen',
-        henkilotunnus: '020190-456B',
-        puhelinnumero: '050-7654321',
-        sahkoposti: 'maija@example.com',
-        liittymispaiva: '2023-03-10',
-        jasentyyppi: 'kannatus',
-        aktiivinen: true,
-      },
-    ]
+    // Convert backend data to frontend format
+    members.value = membersData.map((memberWithAddress: any) => ({
+      id: memberWithAddress.member.id,
+      etunimi: memberWithAddress.member.etunimi,
+      sukunimi: memberWithAddress.member.sukunimi,
+      henkilotunnus: memberWithAddress.member.henkilotunnus,
+      syntymaaika: memberWithAddress.member.syntymaaika,
+      puhelinnumero: memberWithAddress.member.puhelinnumero,
+      sahkoposti: memberWithAddress.member.sahkoposti,
+      liittymispaiva: memberWithAddress.member.liittymispaiva,
+      jasentyyppi: memberWithAddress.member.jasentyyppi,
+      aktiivinen: memberWithAddress.member.aktiivinen,
+      // Add address and household info for future use
+      katuosoite: memberWithAddress.address.katuosoite,
+      postinumero: memberWithAddress.address.postinumero,
+      postitoimipaikka: memberWithAddress.address.postitoimipaikka,
+      talouden_nimi: memberWithAddress.household.talouden_nimi,
+    }))
+    
+    console.log('Processed members:', members.value)
   } catch (error) {
     console.error('Virhe ladatessa jäseniä:', error)
+    // Fallback to empty array on error
+    members.value = []
   }
 }
 
