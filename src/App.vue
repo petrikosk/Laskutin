@@ -39,6 +39,7 @@ const route = useRoute()
 const navigation = [
   { name: 'dashboard', label: 'Etusivu', href: '/' },
   { name: 'members', label: 'Jäsenet', href: '/members' },
+  { name: 'households', label: 'Taloudet', href: '/households' },
   { name: 'invoices', label: 'Laskut', href: '/invoices' },
   { name: 'fees', label: 'Jäsenmaksut', href: '/fees' },
   { name: 'settings', label: 'Asetukset', href: '/settings' },

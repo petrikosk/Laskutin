@@ -193,6 +193,32 @@ pub async fn get_households(db: State<'_, DbState>) -> Result<Vec<Household>, St
 }
 
 #[tauri::command]
+pub async fn get_households_with_addresses(db: State<'_, DbState>) -> Result<Vec<serde_json::Value>, String> {
+    let db = db.lock().await;
+    let households_with_addresses = db.get_households_with_addresses().await.map_err(|e| e.to_string())?;
+    
+    let mut result = Vec::new();
+    for (household, address) in households_with_addresses {
+        let member_count = db.get_household_member_count(household.id).await.map_err(|e| e.to_string())?;
+        
+        result.push(serde_json::json!({
+            "id": household.id,
+            "talouden_nimi": household.talouden_nimi,
+            "osoite": format!("{}, {} {}", address.katuosoite, address.postinumero, address.postitoimipaikka),
+            "member_count": member_count,
+            "created_at": household.created_at,
+            "address": {
+                "katuosoite": address.katuosoite,
+                "postinumero": address.postinumero,
+                "postitoimipaikka": address.postitoimipaikka
+            }
+        }));
+    }
+    
+    Ok(result)
+}
+
+#[tauri::command]
 pub async fn create_household(
     db: State<'_, DbState>,
     household: CreateHousehold,
@@ -201,6 +227,105 @@ pub async fn create_household(
     db.create_household(&household)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn create_household_with_address(
+    db: State<'_, DbState>,
+    household_data: serde_json::Value,
+) -> Result<Household, String> {
+    let db = db.lock().await;
+    
+    // Create household first
+    let household = CreateHousehold {
+        talouden_nimi: household_data["talouden_nimi"].as_str().map(|s| s.to_string()),
+        laskutusosoite_sama: true,
+        laskutusosoite_id: None,
+    };
+    
+    let created_household = db.create_household(&household).await.map_err(|e| e.to_string())?;
+    
+    // Create address for the household
+    let address = CreateAddress {
+        katuosoite: household_data["katuosoite"].as_str().unwrap_or("").to_string(),
+        postinumero: household_data["postinumero"].as_str().unwrap_or("").to_string(),
+        postitoimipaikka: household_data["postitoimipaikka"].as_str().unwrap_or("").to_string(),
+        talous_id: created_household.id,
+    };
+    
+    db.create_address(&address).await.map_err(|e| e.to_string())?;
+    
+    Ok(created_household)
+}
+
+#[tauri::command]
+pub async fn update_household_with_address(
+    db: State<'_, DbState>,
+    id: i64,
+    household_data: serde_json::Value,
+) -> Result<Household, String> {
+    let db = db.lock().await;
+    
+    // Update household name
+    let household = CreateHousehold {
+        talouden_nimi: household_data["talouden_nimi"].as_str().map(|s| s.to_string()),
+        laskutusosoite_sama: true,
+        laskutusosoite_id: None,
+    };
+    
+    let updated_household = db.update_household(id, &household).await.map_err(|e| e.to_string())?;
+    
+    // Update address if provided
+    if let (Some(katuosoite), Some(postinumero), Some(postitoimipaikka)) = (
+        household_data["katuosoite"].as_str(),
+        household_data["postinumero"].as_str(),
+        household_data["postitoimipaikka"].as_str(),
+    ) {
+        db.update_household_address(id, katuosoite, postinumero, postitoimipaikka)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
+    Ok(updated_household)
+}
+
+#[tauri::command]
+pub async fn delete_household(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<(), String> {
+    let db = db.lock().await;
+    db.delete_household(id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn save_pdf_file(
+    file_path: String,
+    data: Vec<u8>,
+) -> Result<(), String> {
+    use std::fs;
+    
+    fs::write(&file_path, data)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn show_save_dialog(
+    app_handle: tauri::AppHandle,
+    default_filename: String,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    
+    let file_path = app_handle
+        .dialog()
+        .file()
+        .set_file_name(&default_filename)
+        .add_filter("PDF Files", &["pdf"])
+        .blocking_save_file();
+    
+    Ok(file_path.map(|p| p.to_string()))
 }
 
 #[tauri::command]

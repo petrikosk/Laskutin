@@ -11,6 +11,7 @@ import '@vuepic/vue-datepicker/dist/main.css';
 // Import components
 import Dashboard from "./components/Dashboard.vue";
 import Members from "./components/Members.vue";
+import Households from "./components/Households.vue";
 import Invoices from "./components/Invoices.vue";
 import MembershipFees from "./components/MembershipFees.vue";
 import OrganizationSettings from "./components/OrganizationSettings.vue";
@@ -18,6 +19,7 @@ import OrganizationSettings from "./components/OrganizationSettings.vue";
 const routes = [
   { path: "/", component: Dashboard, name: "dashboard" },
   { path: "/members", component: Members, name: "members" },
+  { path: "/households", component: Households, name: "households" },
   { path: "/invoices", component: Invoices, name: "invoices" },
   { path: "/fees", component: MembershipFees, name: "fees" },
   { path: "/settings", component: OrganizationSettings, name: "settings" },

@@ -266,7 +266,64 @@ impl Database {
     }
 
     pub async fn get_households(&self) -> Result<Vec<Household>> {
-        Ok(vec![])
+        let rows = sqlx::query("SELECT * FROM households ORDER BY talouden_nimi")
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut households = Vec::new();
+        for row in rows {
+            households.push(Household {
+                id: row.get("id"),
+                talouden_nimi: row.get("talouden_nimi"),
+                laskutusosoite_sama: row.get("laskutusosoite_sama"),
+                laskutusosoite_id: row.get("laskutusosoite_id"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        Ok(households)
+    }
+
+    pub async fn get_households_with_addresses(&self) -> Result<Vec<(Household, Address)>> {
+        let rows = sqlx::query(
+            "SELECT 
+                h.id, h.talouden_nimi, h.laskutusosoite_sama, h.laskutusosoite_id,
+                h.created_at, h.updated_at,
+                a.katuosoite, a.postinumero, a.postitoimipaikka, a.talous_id,
+                a.created_at as address_created_at, a.updated_at as address_updated_at
+             FROM households h
+             JOIN addresses a ON h.id = a.talous_id
+             ORDER BY h.talouden_nimi"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            let household = Household {
+                id: row.get("id"),
+                talouden_nimi: row.get("talouden_nimi"),
+                laskutusosoite_sama: row.get("laskutusosoite_sama"),
+                laskutusosoite_id: row.get("laskutusosoite_id"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            };
+
+            let address = Address {
+                id: row.get("talous_id"), // This should be address id, but we'll use talous_id for now
+                katuosoite: row.get("katuosoite"),
+                postinumero: row.get("postinumero"),
+                postitoimipaikka: row.get("postitoimipaikka"),
+                talous_id: row.get("talous_id"),
+                created_at: row.get("address_created_at"),
+                updated_at: row.get("address_updated_at"),
+            };
+
+            result.push((household, address));
+        }
+
+        Ok(result)
     }
 
     pub async fn create_household(&self, household: &CreateHousehold) -> Result<Household> {
@@ -359,5 +416,85 @@ impl Database {
             .fetch_one(&self.pool)
             .await?;
         Ok(row.get("osoite_id"))
+    }
+
+    pub async fn update_household(&self, id: i64, household: &CreateHousehold) -> Result<Household> {
+        sqlx::query(
+            "UPDATE households SET 
+             talouden_nimi = ?, laskutusosoite_sama = ?, laskutusosoite_id = ?, 
+             updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?"
+        )
+        .bind(&household.talouden_nimi)
+        .bind(household.laskutusosoite_sama)
+        .bind(household.laskutusosoite_id)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        // Fetch and return the updated household
+        let row = sqlx::query("SELECT * FROM households WHERE id = ?")
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(Household {
+            id: row.get("id"),
+            talouden_nimi: row.get("talouden_nimi"),
+            laskutusosoite_sama: row.get("laskutusosoite_sama"),
+            laskutusosoite_id: row.get("laskutusosoite_id"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+
+    pub async fn update_household_address(&self, household_id: i64, katuosoite: &str, postinumero: &str, postitoimipaikka: &str) -> Result<()> {
+        sqlx::query(
+            "UPDATE addresses SET 
+             katuosoite = ?, postinumero = ?, postitoimipaikka = ?, 
+             updated_at = CURRENT_TIMESTAMP 
+             WHERE talous_id = ?"
+        )
+        .bind(katuosoite)
+        .bind(postinumero)
+        .bind(postitoimipaikka)
+        .bind(household_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn delete_household(&self, id: i64) -> Result<()> {
+        // First, delete all members in this household
+        sqlx::query("DELETE FROM members WHERE osoite_id IN (SELECT id FROM addresses WHERE talous_id = ?)")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        // Delete the address
+        sqlx::query("DELETE FROM addresses WHERE talous_id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        // Delete the household
+        sqlx::query("DELETE FROM households WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_household_member_count(&self, household_id: i64) -> Result<i64> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) as count FROM members m 
+             JOIN addresses a ON m.osoite_id = a.id 
+             WHERE a.talous_id = ?"
+        )
+        .bind(household_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.get("count"))
     }
 }

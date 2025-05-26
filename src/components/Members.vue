@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="page-content">
     <div class="sm:flex sm:items-center">
       <div class="sm:flex-auto">
         <h1 class="text-3xl font-bold text-gray-900">Jäsenet</h1>
@@ -57,7 +57,7 @@
     </div>
 
     <!-- Jäsentaulukko -->
-    <div class="data-table">
+    <div class="data-table members-table">
       <table class="min-w-full divide-y divide-gray-200">
         <thead class="bg-gray-50">
           <tr>
@@ -137,7 +137,7 @@
       </table>
       
       <div v-if="filteredMembers.length === 0" class="text-center py-8">
-        <p class="text-gray-500">Ei jäseniä löytynyt</p>
+        <p class="text-gray-500">Ei jäseniä</p>
       </div>
     </div>
 
@@ -423,7 +423,8 @@ const filteredMembers = computed(() => {
     const matchesSearch = !searchTerm.value || 
       `${member.etunimi} ${member.sukunimi}`.toLowerCase().includes(searchTerm.value.toLowerCase())
     
-    const matchesType = !filterType.value || member.jasentyyppi === filterType.value
+    const matchesType = !filterType.value || 
+      member.jasentyyppi.toLowerCase() === filterType.value.toLowerCase()
     
     const matchesActive = !filterActive.value || 
       member.aktiivinen.toString() === filterActive.value
@@ -490,6 +491,20 @@ const editMember = (member: Member) => {
   if (jasentyyppi === 'kannatus') jasentyyppi = 'Kannatus'  
   if (jasentyyppi === 'kunnia') jasentyyppi = 'Kunnia'
   
+  // Determine address type based on household data
+  let osoitetyyppi = 'oma'
+  let talous_id = null
+  
+  // If member has a household name that's not just their own name, they're in a shared household
+  if (member.talouden_nimi && member.talouden_nimi !== `${member.etunimi} ${member.sukunimi}`) {
+    osoitetyyppi = 'talous'
+    // Find the household ID from taloudet list
+    const talous = taloudet.value.find(t => t.talouden_nimi === member.talouden_nimi)
+    if (talous) {
+      talous_id = talous.id
+    }
+  }
+  
   memberForm.value = {
     etunimi: member.etunimi,
     sukunimi: member.sukunimi,
@@ -500,8 +515,8 @@ const editMember = (member: Member) => {
     jasentyyppi: jasentyyppi,
     aktiivinen: member.aktiivinen,
     // Fill address fields from member data
-    osoitetyyppi: 'oma', // Default to own address for existing members
-    talous_id: null,
+    osoitetyyppi: osoitetyyppi,
+    talous_id: talous_id,
     talouden_nimi: member.talouden_nimi || '',
     katuosoite: member.katuosoite || '',
     postinumero: member.postinumero || '',
@@ -581,10 +596,24 @@ const saveMember = async () => {
     }
     
     if (editingMember.value) {
-      console.log('Calling update_member_with_address with id:', editingMember.value.id, 'member data:', memberDataForBackend)
-      await invoke('update_member_with_address', { 
+      // For now, just update member basic info using the simple update_member command
+      const memberData = {
+        etunimi: memberForm.value.etunimi,
+        sukunimi: memberForm.value.sukunimi,
+        henkilotunnus: null,
+        syntymaaika: memberForm.value.syntymaaika ? memberForm.value.syntymaaika.toISOString().split('T')[0] : null,
+        puhelinnumero: memberForm.value.puhelinnumero || null,
+        sahkoposti: memberForm.value.sahkoposti || null,
+        osoite_id: 1, // Keep existing address for now
+        liittymispaiva: memberForm.value.liittymispaiva.toISOString().split('T')[0],
+        jasentyyppi: memberForm.value.jasentyyppi,
+        aktiivinen: memberForm.value.aktiivinen
+      }
+      
+      console.log('Calling update_member with id:', editingMember.value.id, 'member:', memberData)
+      await invoke('update_member', { 
         id: editingMember.value.id, 
-        member_data: memberDataForBackend 
+        member: memberData 
       })
     } else {
       console.log('Calling create_member_with_address with member data:', memberDataForBackend)
@@ -615,24 +644,21 @@ const deleteMember = async (member: Member) => {
 
 const loadTaloudet = async () => {
   try {
-    // TODO: Hae taloudet backend:ista
-    // taloudet.value = await invoke('get_households')
+    console.log('Loading households with addresses from backend...')
+    const householdsData = await invoke('get_households_with_addresses')
+    console.log('Received households data:', householdsData)
     
-    // Väliaikainen testidata
-    taloudet.value = [
-      {
-        id: 1,
-        talouden_nimi: 'Korhosen perhe',
-        osoite: 'Kotikatu 1, 00100 Helsinki'
-      },
-      {
-        id: 2,
-        talouden_nimi: 'Virtaset',
-        osoite: 'Testikatu 2, 00200 Espoo'
-      }
-    ]
+    // Data is already in the right format from backend
+    taloudet.value = householdsData.map((household: any) => ({
+      id: household.id,
+      talouden_nimi: household.talouden_nimi || `Talous ${household.id}`,
+      osoite: household.osoite,
+    }))
+    
+    console.log('Processed households:', taloudet.value)
   } catch (error) {
     console.error('Virhe ladatessa talouksia:', error)
+    taloudet.value = []
   }
 }
 

@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="page-content">
     <div class="sm:flex sm:items-center">
       <div class="sm:flex-auto">
         <h1 class="text-3xl font-bold text-gray-900">Laskut</h1>
@@ -55,7 +55,7 @@
     </div>
 
     <!-- Laskutaulukko -->
-    <div class="data-table">
+    <div class="data-table invoices-table">
       <table class="min-w-full divide-y divide-gray-200">
         <thead class="bg-gray-50">
           <tr>
@@ -212,12 +212,67 @@
         </div>
       </div>
     </div>
+
+    <!-- Tulostusvalinta-modaali -->
+    <div
+      v-if="showPrintModal"
+      class="modal-overlay"
+      @click="closePrintModal"
+    >
+      <div
+        class="modal-content"
+        @click.stop
+      >
+        <div class="mt-3">
+          <h3 class="text-lg font-medium text-gray-900 mb-4">
+            Tulosta lasku {{ selectedInvoice?.viitenumero }}
+          </h3>
+          
+          <p class="text-sm text-gray-600 mb-6">
+            Valitse haluatko tulostaa laskun suoraan vai tallentaa sen PDF-tiedostona.
+          </p>
+          
+          <div class="flex justify-end space-x-3">
+            <button
+              @click="closePrintModal"
+              class="btn btn-outline"
+            >
+              Peruuta
+            </button>
+            <button
+              @click="handleDownloadPDF"
+              class="btn btn-secondary"
+            >
+              Tallenna PDF
+            </button>
+            <button
+              @click="handlePrint"
+              class="btn btn-primary"
+            >
+              Tulosta
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PDF-komponentti (piilotettu) -->
+    <div v-if="showPrintModal" style="position: absolute; left: -9999px; top: -9999px;">
+      <InvoicePDF 
+        v-if="selectedInvoice && organization"
+        ref="pdfComponentRef"
+        :invoice="selectedInvoice"
+        :organization="organization"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import InvoicePDF from './InvoicePDF.vue'
+import { generateAndSavePDF, printInvoice as printInvoiceUtil } from '../utils/pdfGenerator'
 
 interface Invoice {
   id: number
@@ -236,6 +291,12 @@ const searchTerm = ref('')
 const filterYear = ref('')
 const filterStatus = ref('')
 const showCreateModal = ref(false)
+const showMarkPaidModal = ref(false)
+const selectedInvoice = ref<Invoice | null>(null)
+const validationError = ref('')
+const showPrintModal = ref(false)
+const pdfComponentRef = ref<InstanceType<typeof InvoicePDF> | null>(null)
+const organization = ref<any>(null)
 
 const years = computed(() => {
   const currentYear = new Date().getFullYear()
@@ -314,9 +375,43 @@ const markAsPaid = async (invoice: Invoice) => {
   }
 }
 
-const printInvoice = (invoice: Invoice) => {
-  // TODO: Toteuta tulostustoiminto
-  alert('Tulostustoiminto tulossa!')
+const printInvoice = async (invoice: Invoice) => {
+  selectedInvoice.value = invoice
+  showPrintModal.value = true
+}
+
+const handlePrint = async () => {
+  try {
+    if (!selectedInvoice.value || !pdfComponentRef.value?.invoiceRef) return
+    
+    await printInvoiceUtil(pdfComponentRef.value.invoiceRef)
+    showPrintModal.value = false
+    selectedInvoice.value = null
+  } catch (error) {
+    console.error('Virhe tulostuksessa:', error)
+    alert('Tulostus epäonnistui: ' + error.message)
+  }
+}
+
+const handleDownloadPDF = async () => {
+  try {
+    if (!selectedInvoice.value || !pdfComponentRef.value?.invoiceRef) return
+    
+    const defaultFilename = `lasku_${selectedInvoice.value.viitenumero}.pdf`
+    
+    await generateAndSavePDF(pdfComponentRef.value.invoiceRef, defaultFilename)
+    
+    showPrintModal.value = false
+    selectedInvoice.value = null
+  } catch (error) {
+    console.error('Virhe PDF:n luonnissa:', error)
+    alert('PDF:n luonti epäonnistui: ' + error.message)
+  }
+}
+
+const closePrintModal = () => {
+  showPrintModal.value = false
+  selectedInvoice.value = null
 }
 
 const deleteInvoice = async (invoice: Invoice) => {
@@ -348,16 +443,72 @@ const loadInvoices = async () => {
         luontipaiva: '2024-01-15',
         erapaiva: '2024-02-15',
         maksettu: false,
+        household: {
+          talouden_nimi: 'Korhosen perhe',
+          vastaanottaja: 'Matti Korhonen'
+        },
+        address: {
+          katuosoite: 'Kotikatu 1',
+          postinumero: '00100',
+          postitoimipaikka: 'Helsinki'
+        },
+        lines: [
+          {
+            line: {
+              id: 1,
+              kuvaus: 'Jäsenmaksu 2024',
+              summa: 50.00
+            },
+            member: {
+              etunimi: 'Matti',
+              sukunimi: 'Korhonen'
+            }
+          },
+          {
+            line: {
+              id: 2,
+              kuvaus: 'Jäsenmaksu 2024',
+              summa: 50.00
+            },
+            member: {
+              etunimi: 'Liisa',
+              sukunimi: 'Korhonen'
+            }
+          }
+        ]
       },
       {
         id: 2,
         viitenumero: '202400002',
+        talouden_nimi: 'Virtasen talous',
         osoite: 'Testikatu 2, 00200 Espoo',
         summa: 50.00,
         luontipaiva: '2024-01-15',
         erapaiva: '2024-02-15',
         maksettu: true,
         maksupaiva: '2024-01-20',
+        household: {
+          talouden_nimi: 'Virtasen talous',
+          vastaanottaja: 'Pekka Virtanen'
+        },
+        address: {
+          katuosoite: 'Testikatu 2',
+          postinumero: '00200',
+          postitoimipaikka: 'Espoo'
+        },
+        lines: [
+          {
+            line: {
+              id: 3,
+              kuvaus: 'Jäsenmaksu 2024',
+              summa: 50.00
+            },
+            member: {
+              etunimi: 'Pekka',
+              sukunimi: 'Virtanen'
+            }
+          }
+        ]
       },
     ]
   } catch (error) {
@@ -365,7 +516,16 @@ const loadInvoices = async () => {
   }
 }
 
+const loadOrganization = async () => {
+  try {
+    organization.value = await invoke('get_organization')
+  } catch (error) {
+    console.error('Virhe ladatessa organisaatiota:', error)
+  }
+}
+
 onMounted(() => {
   loadInvoices()
+  loadOrganization()
 })
 </script>

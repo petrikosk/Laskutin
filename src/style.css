@@ -33,6 +33,10 @@ button {
   min-height: 100vh;
 }
 
+.page-content {
+  padding: 0 2rem;
+}
+
 .bg-gray-50 {
   background-color: #f9fafb;
 }
@@ -511,7 +515,7 @@ button {
 
 .table th {
   background-color: #f8fafc;
-  padding: 1rem 1.5rem;
+  padding: 1rem 2rem;
   text-align: left;
   font-weight: 600;
   color: #374151;
@@ -522,7 +526,7 @@ button {
 }
 
 .table td {
-  padding: 1rem 1.5rem;
+  padding: 1rem 2rem;
   border-bottom: 1px solid #f3f4f6;
   font-size: 0.875rem;
 }
@@ -538,34 +542,97 @@ button {
   table-layout: fixed;
 }
 
-.data-table th:nth-child(1),
-.data-table td:nth-child(1) {
-  width: 22%;
+/* Members table (6 columns) */
+.data-table.members-table th:nth-child(1),
+.data-table.members-table td:nth-child(1) {
+  width: 14%;
 }
 
-.data-table th:nth-child(2),
-.data-table td:nth-child(2) {
-  width: 23%;
+.data-table.members-table th:nth-child(2),
+.data-table.members-table td:nth-child(2) {
+  width: 16%;
 }
 
-.data-table th:nth-child(3),
-.data-table td:nth-child(3) {
-  width: 15%;
+.data-table.members-table th:nth-child(3),
+.data-table.members-table td:nth-child(3) {
+  width: 8%;
 }
 
-.data-table th:nth-child(4),
-.data-table td:nth-child(4) {
-  width: 15%;
+.data-table.members-table th:nth-child(4),
+.data-table.members-table td:nth-child(4) {
+  width: 8%;
 }
 
-.data-table th:nth-child(5),
-.data-table td:nth-child(5) {
+.data-table.members-table th:nth-child(5),
+.data-table.members-table td:nth-child(5) {
+  width: 8%;
+}
+
+.data-table.members-table th:nth-child(6),
+.data-table.members-table td:nth-child(6) {
+  width: 46%;
+}
+
+/* Households table (5 columns) */
+.data-table.households-table th:nth-child(1),
+.data-table.households-table td:nth-child(1) {
+  width: 20%;
+}
+
+.data-table.households-table th:nth-child(2),
+.data-table.households-table td:nth-child(2) {
+  width: 25%;
+}
+
+.data-table.households-table th:nth-child(3),
+.data-table.households-table td:nth-child(3) {
   width: 12%;
 }
 
-.data-table th:nth-child(6),
-.data-table td:nth-child(6) {
+.data-table.households-table th:nth-child(4),
+.data-table.households-table td:nth-child(4) {
+  width: 12%;
+}
+
+.data-table.households-table th:nth-child(5),
+.data-table.households-table td:nth-child(5) {
+  width: 31%;
+}
+
+/* Invoices table (7 columns) */
+.data-table.invoices-table th:nth-child(1),
+.data-table.invoices-table td:nth-child(1) {
+  width: 10%;
+}
+
+.data-table.invoices-table th:nth-child(2),
+.data-table.invoices-table td:nth-child(2) {
   width: 18%;
+}
+
+.data-table.invoices-table th:nth-child(3),
+.data-table.invoices-table td:nth-child(3) {
+  width: 12%;
+}
+
+.data-table.invoices-table th:nth-child(4),
+.data-table.invoices-table td:nth-child(4) {
+  width: 10%;
+}
+
+.data-table.invoices-table th:nth-child(5),
+.data-table.invoices-table td:nth-child(5) {
+  width: 8%;
+}
+
+.data-table.invoices-table th:nth-child(6),
+.data-table.invoices-table td:nth-child(6) {
+  width: 8%;
+}
+
+.data-table.invoices-table th:nth-child(7),
+.data-table.invoices-table td:nth-child(7) {
+  width: 34%;
 }
 
 /* Ensure consistent text alignment */
@@ -578,6 +645,12 @@ button {
 .data-table th:last-child,
 .data-table td:last-child {
   text-align: right;
+}
+
+/* Override Tailwind px-6 class for better table spacing */
+.px-6 {
+  padding-left: 2rem;
+  padding-right: 2rem;
 }
 
 /* Badges */
