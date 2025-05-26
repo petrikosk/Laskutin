@@ -134,7 +134,7 @@
       </table>
       
       <div v-if="filteredInvoices.length === 0" class="text-center py-8">
-        <p class="text-gray-500">Ei laskuja löytynyt</p>
+        <p class="text-gray-500">Laskuja ei löytynyt</p>
       </div>
     </div>
 

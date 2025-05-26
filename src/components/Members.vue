@@ -568,16 +568,16 @@ const saveMember = async () => {
       sahkoposti: memberForm.value.sahkoposti || null,
       osoite_id: 1, // TODO: Create address/household first and get real ID
       liittymispaiva: memberForm.value.liittymispaiva.toISOString().split('T')[0],
-      jasentyyppi: memberForm.value.jasentyyppi.toLowerCase(), // Convert to lowercase for backend
+      jasentyyppi: memberForm.value.jasentyyppi, // Keep capitalized - backend now accepts both
       aktiivinen: memberForm.value.aktiivinen
     }
     
     if (editingMember.value) {
       console.log('Calling update_member with id:', editingMember.value.id, 'member:', memberData)
-      await invoke('update_member', editingMember.value.id, memberData)
+      await invoke('update_member', { id: editingMember.value.id, member: memberData })
     } else {
-      console.log('Calling create_member with member:', memberData)
-      await invoke('create_member', memberData)
+      console.log('Calling create_member_with_address with member data:', memberForm.value)
+      await invoke('create_member_with_address', { member_data: memberForm.value })
     }
     await loadMembers()
     closeModal()

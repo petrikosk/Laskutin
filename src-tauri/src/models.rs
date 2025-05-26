@@ -89,9 +89,9 @@ impl std::str::FromStr for MemberType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "varsinainen" => Ok(MemberType::Varsinainen),
-            "kannatus" => Ok(MemberType::Kannatus),
-            "kunnia" => Ok(MemberType::Kunnia),
+            "varsinainen" | "Varsinainen" => Ok(MemberType::Varsinainen),
+            "kannatus" | "Kannatus" => Ok(MemberType::Kannatus),
+            "kunnia" | "Kunnia" => Ok(MemberType::Kunnia),
             _ => Err(format!("Invalid member type: {}", s)),
         }
     }

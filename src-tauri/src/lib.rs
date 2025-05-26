@@ -23,6 +23,7 @@ pub fn run() {
                 commands::update_organization,
                 commands::get_members,
                 commands::create_member,
+                commands::create_member_with_address,
                 commands::update_member,
                 commands::delete_member,
                 commands::get_households,

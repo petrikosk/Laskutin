@@ -82,27 +82,118 @@ impl Database {
         .await?
         .last_insert_rowid();
 
-        // Return a basic member for now
+        // Fetch and return the created member
+        let row = sqlx::query(
+            "SELECT * FROM members WHERE id = ?"
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
         Ok(Member {
+            id: row.get("id"),
+            etunimi: row.get("etunimi"),
+            sukunimi: row.get("sukunimi"),
+            henkilotunnus: row.get("henkilotunnus"),
+            syntymaaika: row.get("syntymaaika"),
+            puhelinnumero: row.get("puhelinnumero"),
+            sahkoposti: row.get("sahkoposti"),
+            osoite_id: row.get("osoite_id"),
+            liittymispaiva: row.get("liittymispaiva"),
+            jasentyyppi: row.get("jasentyyppi"),
+            aktiivinen: row.get("aktiivinen"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+
+    pub async fn create_address(&self, address: &CreateAddress) -> Result<Address> {
+        let id = sqlx::query(
+            "INSERT INTO addresses (katuosoite, postinumero, postitoimipaikka, talous_id)
+             VALUES (?, ?, ?, ?)"
+        )
+        .bind(&address.katuosoite)
+        .bind(&address.postinumero)
+        .bind(&address.postitoimipaikka)
+        .bind(address.talous_id)
+        .execute(&self.pool)
+        .await?
+        .last_insert_rowid();
+
+        Ok(Address {
             id,
-            etunimi: member.etunimi.clone(),
-            sukunimi: member.sukunimi.clone(),
-            henkilotunnus: member.henkilotunnus.clone(),
-            syntymaaika: member.syntymaaika,
-            puhelinnumero: member.puhelinnumero.clone(),
-            sahkoposti: member.sahkoposti.clone(),
-            osoite_id: member.osoite_id,
-            liittymispaiva: member.liittymispaiva,
-            jasentyyppi: member.jasentyyppi.to_string(),
-            aktiivinen: member.aktiivinen,
+            katuosoite: address.katuosoite.clone(),
+            postinumero: address.postinumero.clone(),
+            postitoimipaikka: address.postitoimipaikka.clone(),
+            talous_id: address.talous_id,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         })
     }
 
-    // Placeholder methods - implement later
     pub async fn get_members(&self) -> Result<Vec<MemberWithAddress>> {
-        Ok(vec![])
+        let rows = sqlx::query(
+            "SELECT 
+                m.id, m.etunimi, m.sukunimi, m.henkilotunnus, m.syntymaaika,
+                m.puhelinnumero, m.sahkoposti, m.osoite_id, m.liittymispaiva,
+                m.jasentyyppi, m.aktiivinen, m.created_at, m.updated_at,
+                a.katuosoite, a.postinumero, a.postitoimipaikka, a.talous_id,
+                a.created_at as address_created_at, a.updated_at as address_updated_at,
+                h.talouden_nimi, h.laskutusosoite_sama, h.laskutusosoite_id,
+                h.created_at as household_created_at, h.updated_at as household_updated_at
+             FROM members m
+             JOIN addresses a ON m.osoite_id = a.id
+             JOIN households h ON a.talous_id = h.id
+             ORDER BY m.sukunimi, m.etunimi"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut members = Vec::new();
+        for row in rows {
+            let member = Member {
+                id: row.get("id"),
+                etunimi: row.get("etunimi"),
+                sukunimi: row.get("sukunimi"),
+                henkilotunnus: row.get("henkilotunnus"),
+                syntymaaika: row.get("syntymaaika"),
+                puhelinnumero: row.get("puhelinnumero"),
+                sahkoposti: row.get("sahkoposti"),
+                osoite_id: row.get("osoite_id"),
+                liittymispaiva: row.get("liittymispaiva"),
+                jasentyyppi: row.get("jasentyyppi"),
+                aktiivinen: row.get("aktiivinen"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            };
+
+            let address = Address {
+                id: row.get("osoite_id"),
+                katuosoite: row.get("katuosoite"),
+                postinumero: row.get("postinumero"),
+                postitoimipaikka: row.get("postitoimipaikka"),
+                talous_id: row.get("talous_id"),
+                created_at: row.get("address_created_at"),
+                updated_at: row.get("address_updated_at"),
+            };
+
+            let household = Household {
+                id: row.get("talous_id"),
+                talouden_nimi: row.get("talouden_nimi"),
+                laskutusosoite_sama: row.get("laskutusosoite_sama"),
+                laskutusosoite_id: row.get("laskutusosoite_id"),
+                created_at: row.get("household_created_at"),
+                updated_at: row.get("household_updated_at"),
+            };
+
+            members.push(MemberWithAddress {
+                member,
+                address,
+                household,
+            });
+        }
+
+        Ok(members)
     }
 
     pub async fn update_organization(&self, _org: &CreateOrganization) -> Result<Organization> {
@@ -123,22 +214,50 @@ impl Database {
         })
     }
 
-    pub async fn update_member(&self, _id: i64, _member: &CreateMember) -> Result<Member> {
-        // Placeholder
+    pub async fn update_member(&self, id: i64, member: &CreateMember) -> Result<Member> {
+        sqlx::query(
+            "UPDATE members SET 
+             etunimi = ?, sukunimi = ?, henkilotunnus = ?, syntymaaika = ?,
+             puhelinnumero = ?, sahkoposti = ?, osoite_id = ?, liittymispaiva = ?,
+             jasentyyppi = ?, aktiivinen = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?"
+        )
+        .bind(&member.etunimi)
+        .bind(&member.sukunimi)
+        .bind(&member.henkilotunnus)
+        .bind(&member.syntymaaika)
+        .bind(&member.puhelinnumero)
+        .bind(&member.sahkoposti)
+        .bind(member.osoite_id)
+        .bind(&member.liittymispaiva)
+        .bind(member.jasentyyppi.to_string())
+        .bind(member.aktiivinen)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        // Fetch and return the updated member
+        let row = sqlx::query(
+            "SELECT * FROM members WHERE id = ?"
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
         Ok(Member {
-            id: 1,
-            etunimi: "Test".to_string(),
-            sukunimi: "User".to_string(),
-            henkilotunnus: None,
-            syntymaaika: None,
-            puhelinnumero: None,
-            sahkoposti: None,
-            osoite_id: 1,
-            liittymispaiva: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            jasentyyppi: "varsinainen".to_string(),
-            aktiivinen: true,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            id: row.get("id"),
+            etunimi: row.get("etunimi"),
+            sukunimi: row.get("sukunimi"),
+            henkilotunnus: row.get("henkilotunnus"),
+            syntymaaika: row.get("syntymaaika"),
+            puhelinnumero: row.get("puhelinnumero"),
+            sahkoposti: row.get("sahkoposti"),
+            osoite_id: row.get("osoite_id"),
+            liittymispaiva: row.get("liittymispaiva"),
+            jasentyyppi: row.get("jasentyyppi"),
+            aktiivinen: row.get("aktiivinen"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
         })
     }
 
@@ -150,12 +269,23 @@ impl Database {
         Ok(vec![])
     }
 
-    pub async fn create_household(&self, _household: &CreateHousehold) -> Result<Household> {
+    pub async fn create_household(&self, household: &CreateHousehold) -> Result<Household> {
+        let id = sqlx::query(
+            "INSERT INTO households (talouden_nimi, laskutusosoite_sama, laskutusosoite_id)
+             VALUES (?, ?, ?)"
+        )
+        .bind(&household.talouden_nimi)
+        .bind(household.laskutusosoite_sama)
+        .bind(household.laskutusosoite_id)
+        .execute(&self.pool)
+        .await?
+        .last_insert_rowid();
+
         Ok(Household {
-            id: 1,
-            talouden_nimi: None,
-            laskutusosoite_sama: true,
-            laskutusosoite_id: None,
+            id,
+            talouden_nimi: household.talouden_nimi.clone(),
+            laskutusosoite_sama: household.laskutusosoite_sama,
+            laskutusosoite_id: household.laskutusosoite_id,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         })
