@@ -129,6 +129,58 @@ pub async fn update_member(
 }
 
 #[tauri::command]
+pub async fn update_member_with_address(
+    db: State<'_, DbState>,
+    id: i64,
+    member_data: serde_json::Value,
+) -> Result<Member, String> {
+    let db = db.lock().await;
+    
+    // First update the address if provided
+    if let (Some(katuosoite), Some(postinumero), Some(postitoimipaikka)) = (
+        member_data["katuosoite"].as_str(),
+        member_data["postinumero"].as_str(), 
+        member_data["postitoimipaikka"].as_str()
+    ) {
+        let address_id = db.get_member_address_id(id).await.map_err(|e| e.to_string())?;
+        db.update_address(address_id, katuosoite, postinumero, postitoimipaikka)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    
+    // Parse member type
+    let member_type_str = member_data["jasentyyppi"].as_str().unwrap_or("Varsinainen");
+    let member_type: MemberType = member_type_str.parse()
+        .map_err(|e: String| format!("Invalid member type: {}", e))?;
+    
+    // Parse dates
+    let syntymaaika = member_data["syntymaaika"].as_str()
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+    
+    let liittymispaiva = member_data["liittymispaiva"].as_str()
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+        .unwrap_or_else(|| chrono::Utc::now().date_naive());
+    
+    // Get current osoite_id (don't change it for existing members)
+    let address_id = db.get_member_address_id(id).await.map_err(|e| e.to_string())?;
+    
+    let member = CreateMember {
+        etunimi: member_data["etunimi"].as_str().unwrap_or("").to_string(),
+        sukunimi: member_data["sukunimi"].as_str().unwrap_or("").to_string(),
+        henkilotunnus: member_data["henkilotunnus"].as_str().map(|s| s.to_string()),
+        syntymaaika,
+        puhelinnumero: member_data["puhelinnumero"].as_str().map(|s| s.to_string()),
+        sahkoposti: member_data["sahkoposti"].as_str().map(|s| s.to_string()),
+        osoite_id: address_id,
+        liittymispaiva,
+        jasentyyppi: member_type,
+        aktiivinen: member_data["aktiivinen"].as_bool().unwrap_or(true),
+    };
+    
+    db.update_member(id, &member).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn delete_member(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     let db = db.lock().await;
     db.delete_member(id).await.map_err(|e| e.to_string())

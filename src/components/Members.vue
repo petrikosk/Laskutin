@@ -483,6 +483,13 @@ const openAddModal = () => {
 const editMember = (member: Member) => {
   editingMember.value = member
   validationError.value = ''
+  
+  // Convert member type to capitalized form expected by frontend
+  let jasentyyppi = member.jasentyyppi
+  if (jasentyyppi === 'varsinainen') jasentyyppi = 'Varsinainen'
+  if (jasentyyppi === 'kannatus') jasentyyppi = 'Kannatus'  
+  if (jasentyyppi === 'kunnia') jasentyyppi = 'Kunnia'
+  
   memberForm.value = {
     etunimi: member.etunimi,
     sukunimi: member.sukunimi,
@@ -490,8 +497,15 @@ const editMember = (member: Member) => {
     puhelinnumero: member.puhelinnumero || '',
     sahkoposti: member.sahkoposti || '',
     liittymispaiva: new Date(member.liittymispaiva),
-    jasentyyppi: member.jasentyyppi,
+    jasentyyppi: jasentyyppi,
     aktiivinen: member.aktiivinen,
+    // Fill address fields from member data
+    osoitetyyppi: 'oma', // Default to own address for existing members
+    talous_id: null,
+    talouden_nimi: member.talouden_nimi || '',
+    katuosoite: member.katuosoite || '',
+    postinumero: member.postinumero || '',
+    postitoimipaikka: member.postitoimipaikka || '',
   }
   showModal.value = true
 }
@@ -573,8 +587,8 @@ const saveMember = async () => {
     }
     
     if (editingMember.value) {
-      console.log('Calling update_member with id:', editingMember.value.id, 'member:', memberData)
-      await invoke('update_member', { id: editingMember.value.id, member: memberData })
+      console.log('Calling update_member_with_address with id:', editingMember.value.id, 'member data:', memberForm.value)
+      await invoke('update_member_with_address', { id: editingMember.value.id, member_data: memberForm.value })
     } else {
       console.log('Calling create_member_with_address with member data:', memberForm.value)
       await invoke('create_member_with_address', { member_data: memberForm.value })

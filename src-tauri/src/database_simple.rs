@@ -339,4 +339,25 @@ impl Database {
             updated_at: chrono::Utc::now(),
         })
     }
+
+    pub async fn update_address(&self, address_id: i64, katuosoite: &str, postinumero: &str, postitoimipaikka: &str) -> Result<()> {
+        sqlx::query(
+            "UPDATE addresses SET katuosoite = ?, postinumero = ?, postitoimipaikka = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        )
+        .bind(katuosoite)
+        .bind(postinumero)
+        .bind(postitoimipaikka)
+        .bind(address_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_member_address_id(&self, member_id: i64) -> Result<i64> {
+        let row = sqlx::query("SELECT osoite_id FROM members WHERE id = ?")
+            .bind(member_id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.get("osoite_id"))
+    }
 }
