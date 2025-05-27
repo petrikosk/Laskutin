@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "cross-env SQLX_OFFLINE=true tauri build"
   },
   "dependencies": {
     "@tanstack/vue-query": "^5.77.1",
