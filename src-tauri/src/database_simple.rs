@@ -43,6 +43,10 @@ impl Database {
         Ok(Database { pool })
     }
 
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
+
     pub async fn get_organization(&self) -> Result<Option<Organization>> {
         let result = sqlx::query("SELECT * FROM organization LIMIT 1")
             .fetch_optional(&self.pool)

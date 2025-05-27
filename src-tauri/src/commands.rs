@@ -440,3 +440,112 @@ pub async fn get_dashboard_stats(db: State<'_, DbState>) -> Result<DashboardStat
         yearly_income,
     })
 }
+
+#[tauri::command]
+pub async fn show_directory_dialog(
+    app_handle: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    
+    let dir_path = app_handle
+        .dialog()
+        .file()
+        .blocking_pick_folder();
+    
+    Ok(dir_path.map(|p| p.to_string()))
+}
+
+#[tauri::command]
+pub async fn show_file_dialog(
+    app_handle: tauri::AppHandle,
+    filters: Vec<(String, Vec<String>)>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    
+    let mut dialog = app_handle.dialog().file();
+    
+    for (name, extensions) in filters {
+        let ext_refs: Vec<&str> = extensions.iter().map(|s| s.as_str()).collect();
+        dialog = dialog.add_filter(&name, &ext_refs);
+    }
+    
+    let file_path = dialog.blocking_pick_file();
+    
+    Ok(file_path.map(|p| p.to_string()))
+}
+
+#[tauri::command]
+pub async fn backup_database(
+    backup_dir: String,
+) -> Result<String, String> {
+    use std::fs;
+    use std::path::PathBuf;
+    
+    // Get the database path (same logic as in Database::new())
+    let app_data_dir = dirs::data_dir()
+        .map(|dir| dir.join("laskutin"))
+        .unwrap_or_else(|| PathBuf::from("."));
+    
+    let db_path = app_data_dir.join("laskutin.db");
+    
+    if !db_path.exists() {
+        return Err("Database file does not exist".to_string());
+    }
+    
+    // Create backup filename with timestamp
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+    let backup_filename = format!("laskutin_backup_{}.db", timestamp);
+    let backup_path = PathBuf::from(&backup_dir).join(&backup_filename);
+    
+    // Copy the database file
+    fs::copy(&db_path, &backup_path)
+        .map_err(|e| format!("Failed to backup database: {}", e))?;
+    
+    Ok(backup_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn restore_database(
+    db: State<'_, DbState>,
+    backup_file_path: String,
+) -> Result<(), String> {
+    use std::fs;
+    use std::path::PathBuf;
+    
+    let backup_path = PathBuf::from(&backup_file_path);
+    
+    if !backup_path.exists() {
+        return Err("Backup file does not exist".to_string());
+    }
+    
+    // Get the current database path
+    let app_data_dir = dirs::data_dir()
+        .map(|dir| dir.join("laskutin"))
+        .unwrap_or_else(|| PathBuf::from("."));
+    
+    let db_path = app_data_dir.join("laskutin.db");
+    
+    // Close the current database connections properly
+    {
+        let db_guard = db.lock().await;
+        db_guard.close().await;
+    } // Drop the mutex guard here
+    
+    // Wait a bit to ensure connections are closed
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    
+    // Copy the backup file to replace the current database
+    fs::copy(&backup_path, &db_path)
+        .map_err(|e| format!("Failed to restore database: {}", e))?;
+    
+    // Replace the database instance in the state with a new one
+    {
+        let new_db = crate::database::Database::new().await
+            .map_err(|e| format!("Failed to reinitialize database: {}", e))?;
+        
+        let mut db_guard = db.lock().await;
+        *db_guard = new_db;
+    }
+    
+    Ok(())
+}

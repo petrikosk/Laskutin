@@ -154,6 +154,47 @@
       </div>
     </div>
 
+    <!-- Tietokannan hallinta -->
+    <div class="form-card mt-8">
+      <div class="px-6 py-6">
+        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-6">
+          Tietokannan hallinta
+        </h3>
+        
+        <div class="space-y-6">
+          <div>
+            <h4 class="text-md font-medium text-gray-900 mb-2">Varmuuskopio</h4>
+            <p class="text-sm text-gray-600 mb-4">
+              Luo varmuuskopio tietokannasta valitsemaasi kansioon.
+            </p>
+            <button
+              @click="createBackup"
+              :disabled="isBackingUp"
+              class="btn btn-secondary"
+              :class="{'opacity-50': isBackingUp}"
+            >
+              {{ isBackingUp ? 'Luodaan varmuuskopiota...' : 'Luo varmuuskopio' }}
+            </button>
+          </div>
+
+          <div class="border-t border-gray-200 pt-6">
+            <h4 class="text-md font-medium text-gray-900 mb-2">Palauta varmuuskopio</h4>
+            <p class="text-sm text-gray-600 mb-4">
+              Palauta tietokanta varmuuskopiosta. <span class="font-semibold text-red-600">Varoitus: Tämä korvaa nykyisen tietokannan!</span>
+            </p>
+            <button
+              @click="restoreBackup"
+              :disabled="isRestoring"
+              class="btn btn-danger"
+              :class="{'opacity-50': isRestoring}"
+            >
+              {{ isRestoring ? 'Palautetaan...' : 'Palauta varmuuskopio' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Onnistumisviesti -->
     <div
       v-if="showSuccess"
@@ -173,6 +214,19 @@
       </div>
     </div>
 
+    <!-- Vahvistus dialogi -->
+    <ConfirmDialog
+      :show="showRestoreConfirm"
+      title="Vahvista tietokannan palautus"
+      message="Haluatko varmasti palauttaa tietokannan varmuuskopiosta? Tämä korvaa nykyisen tietokannan ja kaikki tallentamattomat muutokset menetetään."
+      confirmText="Palauta"
+      cancelText="Peruuta"
+      type="danger"
+      icon="danger"
+      @confirm="confirmRestore"
+      @cancel="showRestoreConfirm = false"
+    />
+
     <!-- Virhe dialogi -->
     <AlertDialog
       :show="showErrorDialog"
@@ -189,6 +243,7 @@
 import { ref, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import AlertDialog from './AlertDialog.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 interface Organization {
   nimi: string
@@ -218,6 +273,10 @@ const saving = ref(false)
 const showSuccess = ref(false)
 const showErrorDialog = ref(false)
 const errorMessage = ref('')
+const isBackingUp = ref(false)
+const isRestoring = ref(false)
+const showRestoreConfirm = ref(false)
+let selectedBackupFile = ref('')
 
 // Custom validation function
 const handleInvalidInput = (event: Event) => {
@@ -290,6 +349,83 @@ const loadOrganization = async () => {
     }
   } catch (error) {
     console.error('Virhe ladatessa yhdistyksen tietoja:', error)
+  }
+}
+
+const createBackup = async () => {
+  isBackingUp.value = true
+  
+  try {
+    // Show directory selection dialog
+    const backupDir = await invoke('show_directory_dialog')
+    
+    if (!backupDir) {
+      isBackingUp.value = false
+      return // User cancelled
+    }
+    
+    // Create backup
+    const backupPath = await invoke('backup_database', { backupDir })
+    
+    showSuccess.value = true
+    setTimeout(() => {
+      showSuccess.value = false
+    }, 3000)
+    
+    console.log('Backup created at:', backupPath)
+    
+  } catch (error) {
+    console.error('Virhe luotaessa varmuuskopiota:', error)
+    errorMessage.value = 'Virhe luotaessa varmuuskopiota: ' + error
+    showErrorDialog.value = true
+  } finally {
+    isBackingUp.value = false
+  }
+}
+
+const restoreBackup = async () => {
+  try {
+    // Show file selection dialog for .db files
+    const backupFile = await invoke('show_file_dialog', { 
+      filters: [['Tietokanta tiedostot', ['db']]] 
+    })
+    
+    if (!backupFile) {
+      return // User cancelled
+    }
+    
+    // Store the selected file and show confirmation dialog
+    selectedBackupFile.value = backupFile as string
+    showRestoreConfirm.value = true
+    
+  } catch (error) {
+    console.error('Virhe valitessa varmuuskopiotiedostoa:', error)
+    errorMessage.value = 'Virhe valitessa varmuuskopiotiedostoa: ' + error
+    showErrorDialog.value = true
+  }
+}
+
+const confirmRestore = async () => {
+  isRestoring.value = true
+  showRestoreConfirm.value = false
+  
+  try {
+    // Restore database - this will reinitialize the database connection
+    await invoke('restore_database', { backupFilePath: selectedBackupFile.value })
+    
+    showSuccess.value = true
+    setTimeout(() => {
+      showSuccess.value = false
+      // Refresh the page to reload data from restored database
+      window.location.reload()
+    }, 2000)
+    
+  } catch (error) {
+    console.error('Virhe palauttaessa varmuuskopiota:', error)
+    errorMessage.value = 'Virhe palauttaessa varmuuskopiota: ' + error
+    showErrorDialog.value = true
+  } finally {
+    isRestoring.value = false
   }
 }
 

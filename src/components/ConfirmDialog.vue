@@ -9,8 +9,8 @@
       @click.stop
     >
       <div class="mt-3">
-        <div v-if="icon" class="flex items-center justify-center w-8 h-8 mx-auto mb-4 rounded-full"
-             :class="iconBgClass">
+        <div v-if="icon" class="flex items-center justify-center w-8 h-8 mx-auto mb-4"
+             :class="icon === 'danger' ? '' : 'rounded-full ' + iconBgClass">
           <div class="icon" :class="[iconClass, iconColorClass]"></div>
         </div>
         

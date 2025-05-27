@@ -44,7 +44,11 @@ pub fn run() {
                 commands::create_invoice_for_year,
                 commands::mark_invoice_paid,
                 commands::delete_invoice,
-                commands::get_dashboard_stats
+                commands::get_dashboard_stats,
+                commands::show_directory_dialog,
+                commands::show_file_dialog,
+                commands::backup_database,
+                commands::restore_database
             ])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
