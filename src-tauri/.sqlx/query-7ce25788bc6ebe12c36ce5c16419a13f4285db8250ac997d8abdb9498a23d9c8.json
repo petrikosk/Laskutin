@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO organization (nimi, katuosoite, postinumero, postitoimipaikka, puhelinnumero, sahkoposti, y_tunnus, pankkitili, bic)\n                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "7ce25788bc6ebe12c36ce5c16419a13f4285db8250ac997d8abdb9498a23d9c8"
+}

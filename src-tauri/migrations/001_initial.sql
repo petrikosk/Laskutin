@@ -1,5 +1,5 @@
 -- Yhdistyksen tiedot (organization)
-CREATE TABLE organization (
+CREATE TABLE IF NOT EXISTS organization (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nimi TEXT NOT NULL,
     katuosoite TEXT NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE organization (
 );
 
 -- Taloudet (households)
-CREATE TABLE households (
+CREATE TABLE IF NOT EXISTS households (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     talouden_nimi TEXT,
     laskutusosoite_sama BOOLEAN NOT NULL DEFAULT 1,
@@ -26,7 +26,7 @@ CREATE TABLE households (
 );
 
 -- Osoitteet (addresses)
-CREATE TABLE addresses (
+CREATE TABLE IF NOT EXISTS addresses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     katuosoite TEXT NOT NULL,
     postinumero TEXT NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE addresses (
 );
 
 -- Jäsenet (members)
-CREATE TABLE members (
+CREATE TABLE IF NOT EXISTS members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     etunimi TEXT NOT NULL,
     sukunimi TEXT NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE members (
 );
 
 -- Jäsenmaksut (membership_fees)
-CREATE TABLE membership_fees (
+CREATE TABLE IF NOT EXISTS membership_fees (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     vuosi INTEGER NOT NULL,
     jasentyyppi TEXT NOT NULL CHECK (jasentyyppi IN ('varsinainen', 'kannatus', 'kunnia')),
@@ -67,7 +67,7 @@ CREATE TABLE membership_fees (
 );
 
 -- Laskut (invoices)
-CREATE TABLE invoices (
+CREATE TABLE IF NOT EXISTS invoices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     talous_id INTEGER NOT NULL,
     luontipaiva DATE NOT NULL DEFAULT (date('now')),
@@ -82,7 +82,7 @@ CREATE TABLE invoices (
 );
 
 -- Laskurivit (invoice_lines)
-CREATE TABLE invoice_lines (
+CREATE TABLE IF NOT EXISTS invoice_lines (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     lasku_id INTEGER NOT NULL,
     jasen_id INTEGER NOT NULL,
@@ -94,34 +94,34 @@ CREATE TABLE invoice_lines (
 );
 
 -- Indeksit suorituskyvyn parantamiseksi
-CREATE INDEX idx_members_osoite ON members(osoite_id);
-CREATE INDEX idx_members_jasentyyppi ON members(jasentyyppi);
-CREATE INDEX idx_members_aktiivinen ON members(aktiivinen);
-CREATE INDEX idx_addresses_talous ON addresses(talous_id);
-CREATE INDEX idx_invoices_talous ON invoices(talous_id);
-CREATE INDEX idx_invoices_maksettu ON invoices(maksettu);
-CREATE INDEX idx_invoice_lines_lasku ON invoice_lines(lasku_id);
-CREATE INDEX idx_invoice_lines_jasen ON invoice_lines(jasen_id);
-CREATE INDEX idx_membership_fees_vuosi_tyyppi ON membership_fees(vuosi, jasentyyppi);
+CREATE INDEX IF NOT EXISTS idx_members_osoite ON members(osoite_id);
+CREATE INDEX IF NOT EXISTS idx_members_jasentyyppi ON members(jasentyyppi);
+CREATE INDEX IF NOT EXISTS idx_members_aktiivinen ON members(aktiivinen);
+CREATE INDEX IF NOT EXISTS idx_addresses_talous ON addresses(talous_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_talous ON invoices(talous_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_maksettu ON invoices(maksettu);
+CREATE INDEX IF NOT EXISTS idx_invoice_lines_lasku ON invoice_lines(lasku_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_lines_jasen ON invoice_lines(jasen_id);
+CREATE INDEX IF NOT EXISTS idx_membership_fees_vuosi_tyyppi ON membership_fees(vuosi, jasentyyppi);
 
--- Esimerkkidata
-INSERT INTO organization (nimi, katuosoite, postinumero, postitoimipaikka, puhelinnumero, sahkoposti, y_tunnus, pankkitili, bic) VALUES
+-- Esimerkkidata (vain jos taulut ovat tyhjiä)
+INSERT OR IGNORE INTO organization (nimi, katuosoite, postinumero, postitoimipaikka, puhelinnumero, sahkoposti, y_tunnus, pankkitili, bic) VALUES
 ('Esimerkkiyhdistys ry', 'Yhdistyskatu 1', '00100', 'Helsinki', '09-12345678', 'yhdistys@example.fi', '1234567-8', 'FI12 3456 7890 1234 56', 'OKOYFIHH');
 
-INSERT INTO households (id, talouden_nimi, laskutusosoite_sama) VALUES 
+INSERT OR IGNORE INTO households (id, talouden_nimi, laskutusosoite_sama) VALUES 
 (1, 'Korhosen perhe', 1),
 (2, NULL, 1);
 
-INSERT INTO addresses (id, katuosoite, postinumero, postitoimipaikka, talous_id) VALUES
+INSERT OR IGNORE INTO addresses (id, katuosoite, postinumero, postitoimipaikka, talous_id) VALUES
 (1, 'Kotikatu 1', '00100', 'Helsinki', 1),
 (2, 'Testikatu 2', '00200', 'Espoo', 2);
 
-INSERT INTO members (etunimi, sukunimi, henkilotunnus, puhelinnumero, sahkoposti, osoite_id, liittymispaiva, jasentyyppi) VALUES
+INSERT OR IGNORE INTO members (etunimi, sukunimi, henkilotunnus, puhelinnumero, sahkoposti, osoite_id, liittymispaiva, jasentyyppi) VALUES
 ('Matti', 'Korhonen', '010180-123A', '040-1234567', 'matti@example.com', 1, '2023-01-15', 'varsinainen'),
 ('Maija', 'Korhonen', '020190-456B', '040-7654321', 'maija@example.com', 1, '2023-01-15', 'varsinainen'),
 ('Testi', 'Henkilö', '030185-789C', '050-1112223', 'testi@example.com', 2, '2023-03-10', 'kannatus');
 
-INSERT INTO membership_fees (vuosi, jasentyyppi, summa) VALUES
+INSERT OR IGNORE INTO membership_fees (vuosi, jasentyyppi, summa) VALUES
 (2024, 'varsinainen', 50.00),
 (2024, 'kannatus', 25.00),
 (2024, 'kunnia', 0.00),

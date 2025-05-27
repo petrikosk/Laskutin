@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Database files (should not be included in version control)
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
