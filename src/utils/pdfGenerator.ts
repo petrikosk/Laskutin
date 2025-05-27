@@ -332,8 +332,8 @@ const getInvoiceStyles = (): string => {
 
     .barcode-svg {
       max-width: 100%;
-      height: 70px;
-      margin: 15px 0;
+      height: 50px;
+      margin: 5px 0;
       display: block;
     }
 

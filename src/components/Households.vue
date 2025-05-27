@@ -319,7 +319,7 @@ const saveHousehold = async () => {
     closeModal()
   } catch (error) {
     console.error('Virhe tallentaessa taloutta:', error)
-    validationError.value = `Virhe tallentaessa taloutta: ${error.message || error}`
+    validationError.value = `Virhe tallentaessa taloutta: ${(error as any)?.message || error}`
   }
 }
 
@@ -343,7 +343,7 @@ const loadHouseholds = async () => {
     console.log('Received households data:', householdsData)
     
     // Convert backend data to frontend format
-    households.value = householdsData.map((item: any) => ({
+    households.value = (householdsData as any[]).map((item: any) => ({
       id: item.id,
       talouden_nimi: item.talouden_nimi,
       laskutusosoite_sama: true,

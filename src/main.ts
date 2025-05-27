@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { createPinia } from "pinia";
 import App from "./App.vue";
 import "./style.css";
+import "./icons.css";
 
 // Import Vue Datepicker
 import VueDatePicker from '@vuepic/vue-datepicker';

@@ -3,6 +3,7 @@ use crate::models::*;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
+use chrono::Datelike;
 
 type DbState = Arc<Mutex<Database>>;
 
@@ -64,7 +65,8 @@ pub async fn create_member_with_address(
             };
             
             let household = CreateHousehold {
-                talouden_nimi: household_name,
+                talouden_nimi: household_name.clone(),
+                vastaanottaja: household_name,
                 laskutusosoite_sama: true,
                 laskutusosoite_id: None,
             };
@@ -239,6 +241,7 @@ pub async fn create_household_with_address(
     // Create household first
     let household = CreateHousehold {
         talouden_nimi: household_data["talouden_nimi"].as_str().map(|s| s.to_string()),
+        vastaanottaja: household_data["vastaanottaja"].as_str().map(|s| s.to_string()),
         laskutusosoite_sama: true,
         laskutusosoite_id: None,
     };
@@ -269,6 +272,7 @@ pub async fn update_household_with_address(
     // Update household name
     let household = CreateHousehold {
         talouden_nimi: household_data["talouden_nimi"].as_str().map(|s| s.to_string()),
+        vastaanottaja: household_data["vastaanottaja"].as_str().map(|s| s.to_string()),
         laskutusosoite_sama: true,
         laskutusosoite_id: None,
     };
@@ -364,6 +368,17 @@ pub async fn get_invoices(db: State<'_, DbState>) -> Result<Vec<InvoiceWithDetai
 }
 
 #[tauri::command]
+pub async fn validate_invoice_creation(
+    db: State<'_, DbState>,
+    year: i32,
+) -> Result<String, String> {
+    let db = db.lock().await;
+    db.validate_invoice_creation(year)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn create_invoice_for_year(
     db: State<'_, DbState>,
     year: i32,
@@ -387,4 +402,41 @@ pub async fn mark_invoice_paid(
     db.mark_invoice_paid(id, payment_date)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_invoice(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<(), String> {
+    let db = db.lock().await;
+    db.delete_invoice(id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_membership_fee(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<(), String> {
+    let db = db.lock().await;
+    db.delete_membership_fee(id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_dashboard_stats(db: State<'_, DbState>) -> Result<DashboardStats, String> {
+    let db = db.lock().await;
+    
+    let current_year = chrono::Utc::now().year();
+    
+    let total_members = db.get_total_members().await.map_err(|e| e.to_string())?;
+    let open_invoices = db.get_open_invoices_count().await.map_err(|e| e.to_string())?;
+    let total_receivables = db.get_total_receivables().await.map_err(|e| e.to_string())?;
+    let yearly_income = db.get_yearly_income(current_year).await.map_err(|e| e.to_string())?;
+    
+    Ok(DashboardStats {
+        total_members,
+        open_invoices,
+        total_receivables,
+        yearly_income,
+    })
 }

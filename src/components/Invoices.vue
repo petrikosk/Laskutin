@@ -167,11 +167,11 @@
             
             <div>
               <label class="form-label">Eräpäivä *</label>
-              <input
+              <DateInput
                 v-model="invoiceForm.dueDate"
-                type="date"
-                required
-                class="form-input"
+                :required="true"
+                placeholder="Valitse eräpäivä"
+                input-class="form-input"
               />
             </div>
             
@@ -265,25 +265,64 @@
         :organization="organization"
       />
     </div>
+
+    <!-- Varmistusdialogie -->
+    <ConfirmDialog
+      :show="confirmDialog.show"
+      :title="confirmDialog.title"
+      :message="confirmDialog.message"
+      :type="confirmDialog.type"
+      :icon="confirmDialog.icon"
+      :confirm-text="confirmDialog.confirmText"
+      :cancel-text="confirmDialog.cancelText"
+      @confirm="confirmDialog.onConfirm"
+      @cancel="closeConfirmDialog"
+    />
+
+    <!-- Maksu-dialogie -->
+    <PaymentDialog
+      :show="showPaymentDialog"
+      :invoice-reference="selectedInvoiceForPayment?.viitenumero"
+      @confirm="handlePaymentConfirm"
+      @cancel="closePaymentDialog"
+    />
+
+    <!-- Onnistumis-ilmoitus -->
+    <SuccessNotification
+      :show="successNotification.show"
+      :title="successNotification.title"
+      :message="successNotification.message"
+      @close="closeSuccessNotification"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import InvoicePDF from './InvoicePDF.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
+import DateInput from './DateInput.vue'
+import PaymentDialog from './PaymentDialog.vue'
+import SuccessNotification from './SuccessNotification.vue'
 import { generateAndSavePDF, printInvoice as printInvoiceUtil } from '../utils/pdfGenerator'
+import { formatDate } from '../utils/dateUtils'
 
 interface Invoice {
   id: number
   viitenumero: string
+  laskunumero?: string
   talouden_nimi?: string
+  vastaanottaja?: string
   osoite: string
   summa: number
   luontipaiva: string
   erapaiva: string
   maksettu: boolean
   maksupaiva?: string
+  household?: any
+  address?: any
+  lines?: any[]
 }
 
 const invoices = ref<Invoice[]>([])
@@ -291,12 +330,29 @@ const searchTerm = ref('')
 const filterYear = ref('')
 const filterStatus = ref('')
 const showCreateModal = ref(false)
-const showMarkPaidModal = ref(false)
 const selectedInvoice = ref<Invoice | null>(null)
-const validationError = ref('')
 const showPrintModal = ref(false)
 const pdfComponentRef = ref<InstanceType<typeof InvoicePDF> | null>(null)
 const organization = ref<any>(null)
+const showPaymentDialog = ref(false)
+const selectedInvoiceForPayment = ref<Invoice | null>(null)
+
+const successNotification = ref({
+  show: false,
+  title: '',
+  message: ''
+})
+
+const confirmDialog = ref({
+  show: false,
+  title: '',
+  message: '',
+  type: 'warning' as 'warning' | 'danger' | 'info',
+  icon: 'warning' as 'warning' | 'danger' | 'info',
+  confirmText: 'Kyllä',
+  cancelText: 'Peruuta',
+  onConfirm: () => {}
+})
 
 const years = computed(() => {
   const currentYear = new Date().getFullYear()
@@ -331,13 +387,6 @@ const formatCurrency = (amount: number) => {
   }).format(amount)
 }
 
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString)
-  const day = String(date.getDate()).padStart(2, '0')
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const year = date.getFullYear()
-  return `${day}.${month}.${year}`
-}
 
 const openCreateInvoicesModal = () => {
   showCreateModal.value = true
@@ -347,32 +396,111 @@ const closeCreateModal = () => {
   showCreateModal.value = false
 }
 
+const showConfirmDialog = (options: {
+  title: string
+  message: string
+  type?: 'warning' | 'danger' | 'info'
+  confirmText?: string
+  cancelText?: string
+  onConfirm: () => void
+}) => {
+  confirmDialog.value = {
+    show: true,
+    title: options.title,
+    message: options.message,
+    type: options.type || 'warning',
+    icon: options.type || 'warning',
+    confirmText: options.confirmText || 'Kyllä',
+    cancelText: options.cancelText || 'Peruuta',
+    onConfirm: () => {
+      options.onConfirm()
+      closeConfirmDialog()
+    }
+  }
+}
+
+const closeConfirmDialog = () => {
+  confirmDialog.value.show = false
+}
+
 const createInvoices = async () => {
   try {
-    await invoke('create_invoice_for_year', { year: invoiceForm.value.year })
-    await loadInvoices()
-    closeCreateModal()
-    alert('Laskut luotu onnistuneesti!')
-  } catch (error) {
+    // Validoi ensin ennen laskujen luontia
+    const validationMessage = await invoke('validate_invoice_creation', { year: invoiceForm.value.year })
+    
+    // Kysy varmistus käyttäjältä ENNEN mitään toimintoja
+    showConfirmDialog({
+      title: 'Vahvista laskujen luonti',
+      message: `${validationMessage}\n\nHaluatko jatkaa laskujen luontia?`,
+      type: 'warning',
+      confirmText: 'Luo laskut',
+      cancelText: 'Peruuta',
+      onConfirm: async () => {
+        try {
+          // Luo laskut vasta vahvistuksen jälkeen
+          const createdInvoices = await invoke('create_invoice_for_year', { year: invoiceForm.value.year }) as any[]
+          await loadInvoices()
+          closeCreateModal()
+          showSuccessNotification(
+            'Laskut luotu onnistuneesti!',
+            `${createdInvoices.length} laskua luotiin vuodelle ${invoiceForm.value.year}.`
+          )
+        } catch (error: unknown) {
+          console.error('Virhe luodessa laskuja:', error)
+          alert('Virhe luodessa laskuja: ' + String(error))
+        }
+      }
+    })
+  } catch (error: unknown) {
     console.error('Virhe luodessa laskuja:', error)
-    alert('Virhe luodessa laskuja')
+    alert('Virhe luodessa laskuja: ' + String(error))
   }
 }
 
 const markAsPaid = async (invoice: Invoice) => {
-  const paymentDate = prompt('Anna maksupäivä (YYYY-MM-DD):', new Date().toISOString().split('T')[0])
-  if (paymentDate) {
-    try {
-      await invoke('mark_invoice_paid', { 
-        id: invoice.id, 
-        paymentDate 
-      })
-      await loadInvoices()
-    } catch (error) {
-      console.error('Virhe merkitessä laskua maksetuksi:', error)
-      alert('Virhe merkitessä laskua maksetuksi')
-    }
+  selectedInvoiceForPayment.value = invoice
+  showPaymentDialog.value = true
+}
+
+const handlePaymentConfirm = async (paymentDate: string) => {
+  if (!selectedInvoiceForPayment.value) return
+  
+  try {
+    await invoke('mark_invoice_paid', { 
+      id: selectedInvoiceForPayment.value.id, 
+      paymentDate 
+    })
+    
+    // Tallenna viitenumero ennen dialogin sulkemista
+    const viitenumero = selectedInvoiceForPayment.value.viitenumero
+    
+    await loadInvoices()
+    closePaymentDialog()
+    showSuccessNotification(
+      'Lasku merkitty maksetuksi!',
+      `Lasku ${viitenumero} on merkitty maksetuksi ${paymentDate}.`
+    )
+  } catch (error: unknown) {
+    console.error('Virhe merkitessä laskua maksetuksi:', error)
+    alert('Virhe merkitessä laskua maksetuksi: ' + String(error))
   }
+}
+
+const closePaymentDialog = () => {
+  showPaymentDialog.value = false
+  selectedInvoiceForPayment.value = null
+}
+
+const showSuccessNotification = (title: string, message: string) => {
+  successNotification.value = {
+    show: true,
+    title,
+    message
+  }
+}
+
+const closeSuccessNotification = () => {
+  successNotification.value.show = false
 }
 
 const printInvoice = async (invoice: Invoice) => {
@@ -387,9 +515,9 @@ const handlePrint = async () => {
     await printInvoiceUtil(pdfComponentRef.value.invoiceRef)
     showPrintModal.value = false
     selectedInvoice.value = null
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Virhe tulostuksessa:', error)
-    alert('Tulostus epäonnistui: ' + error.message)
+    alert('Tulostus epäonnistui: ' + (error instanceof Error ? error.message : String(error)))
   }
 }
 
@@ -403,9 +531,9 @@ const handleDownloadPDF = async () => {
     
     showPrintModal.value = false
     selectedInvoice.value = null
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Virhe PDF:n luonnissa:', error)
-    alert('PDF:n luonti epäonnistui: ' + error.message)
+    alert('PDF:n luonti epäonnistui: ' + (error instanceof Error ? error.message : String(error)))
   }
 }
 
@@ -415,104 +543,50 @@ const closePrintModal = () => {
 }
 
 const deleteInvoice = async (invoice: Invoice) => {
-  if (confirm(`Haluatko varmasti poistaa laskun ${invoice.viitenumero}?`)) {
-    try {
-      // TODO: Lisää delete_invoice komento
-      // await invoke('delete_invoice', { id: invoice.id })
-      await loadInvoices()
-    } catch (error) {
-      console.error('Virhe poistaessa laskua:', error)
-      alert('Virhe poistaessa laskua')
+  // Kysy varmistus ENNEN toimintoa
+  showConfirmDialog({
+    title: 'Poista lasku',
+    message: `Haluatko varmasti poistaa laskun ${invoice.viitenumero}?`,
+    type: 'danger',
+    confirmText: 'Poista',
+    cancelText: 'Peruuta',
+    onConfirm: async () => {
+      try {
+        await invoke('delete_invoice', { id: invoice.id })
+        await loadInvoices()
+      } catch (error) {
+        console.error('Virhe poistaessa laskua:', error)
+        alert('Virhe poistaessa laskua')
+      }
     }
-  }
+  })
 }
 
 const loadInvoices = async () => {
   try {
-    // TODO: Hae laskut backend:ista
-    // invoices.value = await invoke('get_invoices')
-    
-    // Väliaikainen testidata
-    invoices.value = [
-      {
-        id: 1,
-        viitenumero: '202400001',
-        talouden_nimi: 'Korhosen perhe',
-        osoite: 'Kotikatu 1, 00100 Helsinki',
-        summa: 100.00,
-        luontipaiva: '2024-01-15',
-        erapaiva: '2024-02-15',
-        maksettu: false,
-        household: {
-          talouden_nimi: 'Korhosen perhe',
-          vastaanottaja: 'Matti Korhonen'
-        },
-        address: {
-          katuosoite: 'Kotikatu 1',
-          postinumero: '00100',
-          postitoimipaikka: 'Helsinki'
-        },
-        lines: [
-          {
-            line: {
-              id: 1,
-              kuvaus: 'Jäsenmaksu 2024',
-              summa: 50.00
-            },
-            member: {
-              etunimi: 'Matti',
-              sukunimi: 'Korhonen'
-            }
-          },
-          {
-            line: {
-              id: 2,
-              kuvaus: 'Jäsenmaksu 2024',
-              summa: 50.00
-            },
-            member: {
-              etunimi: 'Liisa',
-              sukunimi: 'Korhonen'
-            }
-          }
-        ]
-      },
-      {
-        id: 2,
-        viitenumero: '202400002',
-        talouden_nimi: 'Virtasen talous',
-        osoite: 'Testikatu 2, 00200 Espoo',
-        summa: 50.00,
-        luontipaiva: '2024-01-15',
-        erapaiva: '2024-02-15',
-        maksettu: true,
-        maksupaiva: '2024-01-20',
-        household: {
-          talouden_nimi: 'Virtasen talous',
-          vastaanottaja: 'Pekka Virtanen'
-        },
-        address: {
-          katuosoite: 'Testikatu 2',
-          postinumero: '00200',
-          postitoimipaikka: 'Espoo'
-        },
-        lines: [
-          {
-            line: {
-              id: 3,
-              kuvaus: 'Jäsenmaksu 2024',
-              summa: 50.00
-            },
-            member: {
-              etunimi: 'Pekka',
-              sukunimi: 'Virtanen'
-            }
-          }
-        ]
-      },
-    ]
+    const invoiceData = await invoke('get_invoices') as any[]
+    // Muunna backend-data sopivaan muotoon frontend:lle
+    invoices.value = invoiceData.map((item: any) => ({
+      id: item.invoice.id,
+      viitenumero: item.invoice.viitenumero,
+      laskunumero: item.invoice.laskunumero,
+      talouden_nimi: item.household.talouden_nimi,
+      vastaanottaja: item.household.vastaanottaja,
+      osoite: `${item.address.katuosoite}, ${item.address.postinumero} ${item.address.postitoimipaikka}`,
+      summa: item.invoice.summa,
+      luontipaiva: item.invoice.luontipaiva,
+      erapaiva: item.invoice.erapaiva,
+      maksettu: item.invoice.maksettu,
+      maksupaiva: item.invoice.maksupaiva,
+      // Säilytä koko data-objekti PDF:ää varten
+      household: item.household,
+      address: item.address,
+      lines: item.lines
+    }))
   } catch (error) {
     console.error('Virhe ladatessa laskuja:', error)
+    // Fallback: tyhjä lista
+    invoices.value = []
   }
 }
 

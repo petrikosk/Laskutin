@@ -113,10 +113,6 @@
       <div class="barcode-section">
         <div class="barcode-label">Pankkiviivakoodi:</div>
         <svg ref="barcodeRef" class="barcode-svg"></svg>
-        <!-- Fallback jos SVG-viivakoodi ei toimi -->
-        <div v-if="!barcodeRef" class="simple-barcode">
-          <div class="barcode-lines">||||||||||||||||||||||||||||||||||||||||</div>
-        </div>
       </div>
 
       <!-- Lisätiedot -->
@@ -129,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import JsBarcode from 'jsbarcode'
 
 interface Props {
@@ -169,9 +165,9 @@ const createBarcode = () => {
       textElements.forEach(el => el.remove())
     } catch (error) {
       console.error('Virhe viivakoodin luonnissa:', error)
-      // Fallback: näytä vain numeroina
+      // Jos viivakoodi epäonnistuu, jätetään SVG tyhjäksi
       if (barcodeRef.value) {
-        barcodeRef.value.innerHTML = `<text x="50%" y="50%" text-anchor="middle" font-family="monospace">${generateBarcode()}</text>`
+        barcodeRef.value.innerHTML = ''
       }
     }
   }
@@ -380,22 +376,6 @@ defineExpose({
 .barcode-svg text {
   display: none !important;
 }
-
-.simple-barcode {
-  margin: 10px 0;
-}
-
-.barcode-lines {
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  letter-spacing: 1px;
-  line-height: 1;
-  background: #000;
-  color: #fff;
-  padding: 10px 5px;
-  text-align: center;
-}
-
 
 .additional-info {
   text-align: center;

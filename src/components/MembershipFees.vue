@@ -204,12 +204,27 @@
         </div>
       </div>
     </div>
+
+    <!-- Varmistusdialogie -->
+    <ConfirmDialog
+      :show="confirmDialog.show"
+      :title="confirmDialog.title"
+      :message="confirmDialog.message"
+      :type="confirmDialog.type"
+      :icon="confirmDialog.icon"
+      :confirm-text="confirmDialog.confirmText"
+      :cancel-text="confirmDialog.cancelText"
+      @confirm="confirmDialog.onConfirm"
+      @cancel="closeConfirmDialog"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import ConfirmDialog from './ConfirmDialog.vue'
+import { formatDate } from '../utils/dateUtils'
 
 interface MembershipFee {
   id: number
@@ -224,6 +239,17 @@ const filterYear = ref('')
 const filterType = ref('')
 const showModal = ref(false)
 const editingFee = ref<MembershipFee | null>(null)
+
+const confirmDialog = ref({
+  show: false,
+  title: '',
+  message: '',
+  type: 'warning' as 'warning' | 'danger' | 'info',
+  icon: 'warning' as 'warning' | 'danger' | 'info',
+  confirmText: 'Kyllä',
+  cancelText: 'Peruuta',
+  onConfirm: () => {}
+})
 
 const years = computed(() => {
   const currentYear = new Date().getFullYear()
@@ -284,13 +310,6 @@ const formatCurrency = (amount: number) => {
   }).format(amount)
 }
 
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString)
-  const day = String(date.getDate()).padStart(2, '0')
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const year = date.getFullYear()
-  return `${day}.${month}.${year}`
-}
 
 const openAddModal = () => {
   editingFee.value = null
@@ -317,75 +336,85 @@ const closeModal = () => {
   editingFee.value = null
 }
 
+const showConfirmDialog = (options: {
+  title: string
+  message: string
+  type?: 'warning' | 'danger' | 'info'
+  confirmText?: string
+  cancelText?: string
+  onConfirm: () => void
+}) => {
+  confirmDialog.value = {
+    show: true,
+    title: options.title,
+    message: options.message,
+    type: options.type || 'warning',
+    icon: options.type || 'warning',
+    confirmText: options.confirmText || 'Kyllä',
+    cancelText: options.cancelText || 'Peruuta',
+    onConfirm: () => {
+      options.onConfirm()
+      closeConfirmDialog()
+    }
+  }
+}
+
+const closeConfirmDialog = () => {
+  confirmDialog.value.show = false
+}
+
 const saveFee = async () => {
   try {
+    // Muunna jäsentyyppi backend:in odottamaan muotoon
+    const feeData = {
+      ...feeForm.value,
+      jasentyyppi: feeForm.value.jasentyyppi.charAt(0).toUpperCase() + feeForm.value.jasentyyppi.slice(1) // varsinainen -> Varsinainen
+    }
+    
     if (editingFee.value) {
       await invoke('update_membership_fee', { 
         id: editingFee.value.id, 
-        fee: feeForm.value 
+        fee: feeData
       })
     } else {
-      await invoke('create_membership_fee', { fee: feeForm.value })
+      await invoke('create_membership_fee', { fee: feeData })
     }
     await loadFees()
     closeModal()
   } catch (error) {
     console.error('Virhe tallentaessa jäsenmaksua:', error)
-    alert('Virhe tallentaessa jäsenmaksua')
+    alert('Virhe tallentaessa jäsenmaksua: ' + error)
   }
 }
 
 const deleteFee = async (fee: MembershipFee) => {
-  if (confirm(`Haluatko varmasti poistaa ${fee.vuosi} ${getMemberTypeLabel(fee.jasentyyppi)} jäsenmaksun?`)) {
-    try {
-      // TODO: Lisää delete_membership_fee komento
-      // await invoke('delete_membership_fee', { id: fee.id })
-      await loadFees()
-    } catch (error) {
-      console.error('Virhe poistaessa jäsenmaksua:', error)
-      alert('Virhe poistaessa jäsenmaksua')
+  // Kysy varmistus ENNEN poistamista
+  const confirmMessage = `Haluatko varmasti poistaa jäsenmaksun:\n\nVuosi: ${fee.vuosi}\nJäsentyyppi: ${getMemberTypeLabel(fee.jasentyyppi)}\nSumma: ${formatCurrency(fee.summa)}\n\nHuom: Tämä ei vaikuta jo luotuihin laskuihin.`
+  
+  showConfirmDialog({
+    title: 'Poista jäsenmaksu',
+    message: confirmMessage,
+    type: 'danger',
+    confirmText: 'Poista',
+    cancelText: 'Peruuta',
+    onConfirm: async () => {
+      try {
+        await invoke('delete_membership_fee', { id: fee.id })
+        await loadFees()
+      } catch (error) {
+        console.error('Virhe poistaessa jäsenmaksua:', error)
+        alert('Virhe poistaessa jäsenmaksua')
+      }
     }
-  }
+  })
 }
 
 const loadFees = async () => {
   try {
-    // TODO: Hae jäsenmaksut backend:ista
-    // fees.value = await invoke('get_membership_fees')
-    
-    // Väliaikainen testidata
-    fees.value = [
-      {
-        id: 1,
-        vuosi: 2024,
-        jasentyyppi: 'varsinainen',
-        summa: 50.00,
-        created_at: '2024-01-01T00:00:00Z',
-      },
-      {
-        id: 2,
-        vuosi: 2024,
-        jasentyyppi: 'kannatus',
-        summa: 25.00,
-        created_at: '2024-01-01T00:00:00Z',
-      },
-      {
-        id: 3,
-        vuosi: 2024,
-        jasentyyppi: 'kunnia',
-        summa: 0.00,
-        created_at: '2024-01-01T00:00:00Z',
-      },
-      {
-        id: 4,
-        vuosi: 2025,
-        jasentyyppi: 'varsinainen',
-        summa: 55.00,
-        created_at: '2024-11-01T00:00:00Z',
-      },
-    ]
+    fees.value = await invoke('get_membership_fees')
   } catch (error) {
     console.error('Virhe ladatessa jäsenmaksuja:', error)
+    fees.value = []
   }
 }
 

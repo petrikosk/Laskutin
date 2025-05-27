@@ -112,11 +112,11 @@
               <input
                 v-model="organizationForm.pankkitili"
                 type="text"
-                pattern="FI[0-9]{2}( [0-9]{4}){4} [0-9]{2}"
+                pattern="FI[0-9]{16}|FI[0-9]{2}( [0-9]{4}){4} [0-9]{2}"
                 data-field-name="pankkitili"
                 @invalid="handleInvalidInput"
                 @input="(event) => (event.target as HTMLInputElement).setCustomValidity('')"
-                placeholder="FI12 3456 7890 1234 56"
+                placeholder="FI1410093000123458 tai FI12 3456 7890 1234 56"
                 class="form-input"
               />
             </div>
@@ -176,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 
 interface Organization {
@@ -215,7 +215,7 @@ const handleInvalidInput = (event: Event) => {
     const messages: Record<string, string> = {
       'postinumero': 'Postinumeron muoto on virheellinen. Syötä 5-numeroinen postinumero.',
       'y_tunnus': 'Y-tunnuksen muoto on virheellinen. Syötä Y-tunnus muodossa 1234567-8.',
-      'pankkitili': 'Tilinumeron muoto on virheellinen. Syötä suomalainen IBAN-tilinumero muodossa FI12 3456 7890 1234 56.',
+      'pankkitili': 'Tilinumeron muoto on virheellinen. Syötä suomalainen IBAN-tilinumero muodossa FI1410093000123458 tai FI12 3456 7890 1234 56.',
       'bic': 'BIC-koodin muoto on virheellinen. Syötä BIC-koodi muodossa OKOYFIHH.'
     }
     
@@ -250,15 +250,15 @@ const loadOrganization = async () => {
     
     if (organization) {
       organizationForm.value = {
-        nimi: organization.nimi || '',
-        katuosoite: organization.katuosoite || '',
-        postinumero: organization.postinumero || '',
-        postitoimipaikka: organization.postitoimipaikka || '',
-        puhelinnumero: organization.puhelinnumero || '',
-        sahkoposti: organization.sahkoposti || '',
-        y_tunnus: organization.y_tunnus || '',
-        pankkitili: organization.pankkitili || '',
-        bic: organization.bic || '',
+        nimi: (organization as any).nimi || '',
+        katuosoite: (organization as any).katuosoite || '',
+        postinumero: (organization as any).postinumero || '',
+        postitoimipaikka: (organization as any).postitoimipaikka || '',
+        puhelinnumero: (organization as any).puhelinnumero || '',
+        sahkoposti: (organization as any).sahkoposti || '',
+        y_tunnus: (organization as any).y_tunnus || '',
+        pankkitili: (organization as any).pankkitili || '',
+        bic: (organization as any).bic || '',
       }
     } else {
       // Aseta oletusarvot jos yhdistystä ei löydy

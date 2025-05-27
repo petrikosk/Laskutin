@@ -380,6 +380,10 @@ interface Member {
   liittymispaiva: string
   jasentyyppi: string
   aktiivinen: boolean
+  talouden_nimi?: string
+  katuosoite?: string
+  postinumero?: string
+  postitoimipaikka?: string
 }
 
 // Helper function for date formatting
@@ -515,7 +519,7 @@ const editMember = (member: Member) => {
     jasentyyppi: jasentyyppi,
     aktiivinen: member.aktiivinen,
     // Fill address fields from member data
-    osoitetyyppi: osoitetyyppi,
+    osoitetyyppi: osoitetyyppi as 'oma' | 'talous' | 'uusi',
     talous_id: talous_id,
     talouden_nimi: member.talouden_nimi || '',
     katuosoite: member.katuosoite || '',
@@ -624,7 +628,7 @@ const saveMember = async () => {
   } catch (error) {
     console.error('Virhe tallentaessa jäsentä:', error)
     console.error('Error details:', error)
-    validationError.value = `Virhe tallentaessa jäsentä: ${error.message || error}`
+    validationError.value = `Virhe tallentaessa jäsentä: ${(error as any)?.message || error}`
   }
 }
 
@@ -649,7 +653,7 @@ const loadTaloudet = async () => {
     console.log('Received households data:', householdsData)
     
     // Data is already in the right format from backend
-    taloudet.value = householdsData.map((household: any) => ({
+    taloudet.value = (householdsData as any[]).map((household: any) => ({
       id: household.id,
       talouden_nimi: household.talouden_nimi || `Talous ${household.id}`,
       osoite: household.osoite,
@@ -669,7 +673,7 @@ const loadMembers = async () => {
     console.log('Received members data:', membersData)
     
     // Convert backend data to frontend format
-    members.value = membersData.map((memberWithAddress: any) => ({
+    members.value = (membersData as any[]).map((memberWithAddress: any) => ({
       id: memberWithAddress.member.id,
       etunimi: memberWithAddress.member.etunimi,
       sukunimi: memberWithAddress.member.sukunimi,

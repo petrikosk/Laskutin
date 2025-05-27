@@ -35,6 +35,7 @@ pub struct CreateOrganization {
 pub struct Household {
     pub id: i64,
     pub talouden_nimi: Option<String>,
+    pub vastaanottaja: Option<String>,
     pub laskutusosoite_sama: bool,
     pub laskutusosoite_id: Option<i64>,
     pub created_at: DateTime<Utc>,
@@ -44,6 +45,7 @@ pub struct Household {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateHousehold {
     pub talouden_nimi: Option<String>,
+    pub vastaanottaja: Option<String>,
     pub laskutusosoite_sama: bool,
     pub laskutusosoite_id: Option<i64>,
 }
@@ -114,12 +116,6 @@ pub struct Member {
     pub updated_at: DateTime<Utc>,
 }
 
-impl Member {
-    pub fn get_member_type(&self) -> Result<MemberType, String> {
-        self.jasentyyppi.parse()
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateMember {
     pub etunimi: String,
@@ -144,12 +140,6 @@ pub struct MembershipFee {
     pub updated_at: DateTime<Utc>,
 }
 
-impl MembershipFee {
-    pub fn get_member_type(&self) -> Result<MemberType, String> {
-        self.jasentyyppi.parse()
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateMembershipFee {
     pub vuosi: i32,
@@ -165,6 +155,7 @@ pub struct Invoice {
     pub erapaiva: NaiveDate,
     pub summa: f64,
     pub viitenumero: String,
+    pub laskunumero: Option<String>,
     pub maksettu: bool,
     pub maksupaiva: Option<NaiveDate>,
     pub created_at: DateTime<Utc>,
@@ -178,6 +169,7 @@ pub struct CreateInvoice {
     pub erapaiva: NaiveDate,
     pub summa: f64,
     pub viitenumero: String,
+    pub laskunumero: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -218,4 +210,12 @@ pub struct MemberWithAddress {
     pub member: Member,
     pub address: Address,
     pub household: Household,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardStats {
+    pub total_members: i64,
+    pub open_invoices: i64,
+    pub total_receivables: f64,
+    pub yearly_income: f64,
 }
