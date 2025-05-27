@@ -300,7 +300,81 @@ impl Database {
         })
     }
 
-    pub async fn delete_member(&self, _id: i64) -> Result<()> {
+    pub async fn delete_member(&self, id: i64) -> Result<()> {
+        // Start a transaction to ensure data consistency
+        let mut transaction = self.pool.begin().await?;
+        
+        // Check if member has invoice lines
+        let invoice_lines_count = sqlx::query(
+            "SELECT COUNT(*) as count FROM invoice_lines WHERE jasen_id = ?"
+        )
+        .bind(id)
+        .fetch_one(&mut *transaction)
+        .await?
+        .get::<i64, _>("count");
+        
+        if invoice_lines_count > 0 {
+            transaction.rollback().await?;
+            return Err(anyhow::anyhow!(
+                "Jäsentä ei voi poistaa, koska siihen liittyy laskurivejä. Poista ensin laskut."
+            ));
+        }
+        
+        // Get member's household info before deletion for cleanup
+        let household_info = sqlx::query(
+            "SELECT a.talous_id, COUNT(m.id) as member_count 
+             FROM addresses a 
+             LEFT JOIN members m ON m.osoite_id = a.id 
+             WHERE a.id = (SELECT osoite_id FROM members WHERE id = ?)
+             GROUP BY a.talous_id"
+        )
+        .bind(id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        
+        // Delete the member
+        let affected_rows = sqlx::query("DELETE FROM members WHERE id = ?")
+            .bind(id)
+            .execute(&mut *transaction)
+            .await?
+            .rows_affected();
+        
+        if affected_rows == 0 {
+            transaction.rollback().await?;
+            return Err(anyhow::anyhow!("Jäsentä ei löytynyt ID:llä {}", id));
+        }
+        
+        // Check if household became empty and clean up if needed
+        if let Some(household_row) = household_info {
+            let household_id: i64 = household_row.get("talous_id");
+            let remaining_members = sqlx::query(
+                "SELECT COUNT(*) as count FROM members m 
+                 JOIN addresses a ON m.osoite_id = a.id 
+                 WHERE a.talous_id = ?"
+            )
+            .bind(household_id)
+            .fetch_one(&mut *transaction)
+            .await?
+            .get::<i64, _>("count");
+            
+            // If no members left in household, delete the household and its address
+            if remaining_members == 0 {
+                // Delete address first (which will cascade delete members if any remain)
+                sqlx::query("DELETE FROM addresses WHERE talous_id = ?")
+                    .bind(household_id)
+                    .execute(&mut *transaction)
+                    .await?;
+                
+                // Delete household
+                sqlx::query("DELETE FROM households WHERE id = ?")
+                    .bind(household_id)
+                    .execute(&mut *transaction)
+                    .await?;
+            }
+        }
+        
+        // Commit the transaction
+        transaction.commit().await?;
         Ok(())
     }
 

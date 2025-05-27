@@ -651,7 +651,7 @@ const saveMember = async () => {
       })
     } else {
       console.log('Calling create_member_with_address with member data:', memberDataForBackend)
-      await invoke('create_member_with_address', { member_data: memberDataForBackend })
+      await invoke('create_member_with_address', { memberData: memberDataForBackend })
     }
     await loadMembers()
     closeModal()
@@ -663,23 +663,31 @@ const saveMember = async () => {
 }
 
 const deleteMember = async (member: Member) => {
+  console.log('deleteMember called with:', member)
   memberToDelete.value = member
   confirmMessage.value = `Haluatko varmasti poistaa jäsenen ${member.etunimi} ${member.sukunimi}?`
   showConfirmDialog.value = true
+  console.log('showConfirmDialog set to:', showConfirmDialog.value)
 }
 
 const confirmDeleteMember = async () => {
-  if (!memberToDelete.value) return
+  console.log('confirmDeleteMember called')
+  if (!memberToDelete.value) {
+    console.log('No memberToDelete, returning')
+    return
+  }
   
+  console.log('Deleting member:', memberToDelete.value)
   showConfirmDialog.value = false
   try {
-    // TODO: Backend huolehtii talouden automaattisesta poistosta jos se jää tyhjäksi
+    console.log('Calling delete_member with id:', memberToDelete.value.id)
     await invoke('delete_member', { id: memberToDelete.value.id })
+    console.log('Delete successful, reloading data')
     await loadMembers()
     await loadTaloudet() // Päivitä myös taloudet jos jokin poistettiin
   } catch (error) {
     console.error('Virhe poistaessa jäsentä:', error)
-    errorMessage.value = 'Virhe poistaessa jäsentä'
+    errorMessage.value = (error as any)?.message || error || 'Virhe poistaessa jäsentä'
     showErrorDialog.value = true
   } finally {
     memberToDelete.value = null

@@ -9,20 +9,9 @@
       @click.stop
     >
       <div class="mt-3">
-        <div v-if="icon" class="flex items-center justify-center w-12 h-12 mx-auto mb-4 rounded-full"
+        <div v-if="icon" class="flex items-center justify-center w-8 h-8 mx-auto mb-4 rounded-full"
              :class="iconBgClass">
-          <svg v-if="icon === 'success'" class="w-6 h-6" :class="iconColorClass" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          <svg v-else-if="icon === 'error'" class="w-6 h-6" :class="iconColorClass" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-          <svg v-else-if="icon === 'warning'" class="w-6 h-6" :class="iconColorClass" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
-          </svg>
-          <svg v-else class="w-6 h-6" :class="iconColorClass" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+          <div class="icon" :class="[iconClass, iconColorClass]"></div>
         </div>
         
         <h3 class="text-lg font-medium text-gray-900 mb-4 text-center">
@@ -78,6 +67,19 @@ const iconBgClass = computed(() => {
       return 'bg-red-100'
     default:
       return 'bg-blue-100'
+  }
+})
+
+const iconClass = computed(() => {
+  switch (props.icon) {
+    case 'success':
+      return 'icon-success'
+    case 'warning':
+      return 'icon-warning'
+    case 'error':
+      return 'icon-error'
+    default:
+      return 'icon-info'
   }
 })
 
