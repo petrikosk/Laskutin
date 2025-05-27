@@ -1,7 +1,10 @@
 <template>
   <div class="min-h-screen bg-gray-50">
+    <!-- Kustomoitu otsikkopalkki -->
+    <TitleBar />
+    
     <!-- Navigaatio -->
-    <nav class="bg-white shadow-sm border-b border-gray-200">
+    <nav class="bg-white shadow-sm border-b border-gray-200" style="margin-top: 30px;">
       <div class="nav-container">
         <div class="nav-flex">
           <div class="flex">
@@ -33,6 +36,7 @@
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import TitleBar from './components/TitleBar.vue'
 
 const route = useRoute()
 

@@ -25,22 +25,24 @@
       <div class="invoice-details">
         <div class="invoice-info">
           <table class="info-table">
-            <tr>
-              <td><strong>Laskun numero:</strong></td>
-              <td>{{ invoice?.id }}</td>
-            </tr>
-            <tr>
-              <td><strong>Laskun päivämäärä:</strong></td>
-              <td>{{ formatDate(invoice?.luontipaiva) }}</td>
-            </tr>
-            <tr>
-              <td><strong>Eräpäivä:</strong></td>
-              <td>{{ formatDate(invoice?.erapaiva) }}</td>
-            </tr>
-            <tr>
-              <td><strong>Viitenumero:</strong></td>
-              <td>{{ invoice?.viitenumero }}</td>
-            </tr>
+            <tbody>
+              <tr>
+                <td><strong>Laskun numero:</strong></td>
+                <td>{{ invoice?.id }}</td>
+              </tr>
+              <tr>
+                <td><strong>Laskun päivämäärä:</strong></td>
+                <td>{{ formatDate(invoice?.luontipaiva) }}</td>
+              </tr>
+              <tr>
+                <td><strong>Eräpäivä:</strong></td>
+                <td>{{ formatDate(invoice?.erapaiva) }}</td>
+              </tr>
+              <tr>
+                <td><strong>Viitenumero:</strong></td>
+                <td>{{ invoice?.viitenumero }}</td>
+              </tr>
+            </tbody>
           </table>
         </div>
         
@@ -86,26 +88,28 @@
       <div class="payment-info">
         <h3>Maksutiedot</h3>
         <table class="payment-table">
-          <tr>
-            <td><strong>Saajan tilinumero:</strong></td>
-            <td>{{ organization?.pankkitili || 'FI00 0000 0000 0000 00' }}</td>
-          </tr>
-          <tr v-if="organization?.bic">
-            <td><strong>BIC:</strong></td>
-            <td>{{ organization.bic }}</td>
-          </tr>
-          <tr>
-            <td><strong>Viitenumero:</strong></td>
-            <td>{{ invoice?.viitenumero }}</td>
-          </tr>
-          <tr>
-            <td><strong>Eräpäivä:</strong></td>
-            <td>{{ formatDate(invoice?.erapaiva) }}</td>
-          </tr>
-          <tr>
-            <td><strong>Maksettava summa:</strong></td>
-            <td><strong>{{ formatCurrency(invoice?.summa) }}</strong></td>
-          </tr>
+          <tbody>
+            <tr>
+              <td><strong>Saajan tilinumero:</strong></td>
+              <td>{{ organization?.pankkitili || 'FI00 0000 0000 0000 00' }}</td>
+            </tr>
+            <tr v-if="organization?.bic">
+              <td><strong>BIC:</strong></td>
+              <td>{{ organization.bic }}</td>
+            </tr>
+            <tr>
+              <td><strong>Viitenumero:</strong></td>
+              <td>{{ invoice?.viitenumero }}</td>
+            </tr>
+            <tr>
+              <td><strong>Eräpäivä:</strong></td>
+              <td>{{ formatDate(invoice?.erapaiva) }}</td>
+            </tr>
+            <tr>
+              <td><strong>Maksettava summa:</strong></td>
+              <td><strong>{{ formatCurrency(invoice?.summa) }}</strong></td>
+            </tr>
+          </tbody>
         </table>
       </div>
 
