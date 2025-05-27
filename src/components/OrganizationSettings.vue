@@ -172,12 +172,23 @@
         </div>
       </div>
     </div>
+
+    <!-- Virhe dialogi -->
+    <AlertDialog
+      :show="showErrorDialog"
+      title="Virhe"
+      :message="errorMessage"
+      type="error"
+      icon="error"
+      @close="showErrorDialog = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import AlertDialog from './AlertDialog.vue'
 
 interface Organization {
   nimi: string
@@ -205,6 +216,8 @@ const organizationForm = ref<Organization>({
 
 const saving = ref(false)
 const showSuccess = ref(false)
+const showErrorDialog = ref(false)
+const errorMessage = ref('')
 
 // Custom validation function
 const handleInvalidInput = (event: Event) => {
@@ -238,7 +251,8 @@ const saveOrganization = async () => {
     
   } catch (error) {
     console.error('Virhe tallentaessa yhdistyksen tietoja:', error)
-    alert('Virhe tallentaessa yhdistyksen tietoja')
+    errorMessage.value = 'Virhe tallentaessa yhdistyksen tietoja'
+    showErrorDialog.value = true
   } finally {
     saving.value = false
   }

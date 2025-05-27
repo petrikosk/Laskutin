@@ -199,18 +199,62 @@ const formatCurrency = (amount: number) => {
   }).format(amount)
 }
 
-// Pankkiviivakoodin generointi (yksinkertainen versio)
+// Suomalaisen pankkiviivakoodin generointi RF-standardin mukaisesti
 const generateBarcode = () => {
   if (!props.invoice || !props.organization) return ''
   
-  const tilinumero = (props.organization.pankkitili || 'FI0000000000000000').replace(/\s/g, '')
-  const summa = Math.round((props.invoice.summa || 0) * 100).toString().padStart(8, '0')
-  const viitenumero = (props.invoice.viitenumero || '').padStart(20, '0')
-  const erapaiva = props.invoice.erapaiva ? 
-    props.invoice.erapaiva.replace(/-/g, '').slice(2) : '000000' // YYMMDD
-  
-  // Yksinkertainen versio pankkiviivakoodista
-  return `4${tilinumero}${summa}${viitenumero}${erapaiva}`
+  try {
+    // 1. IBAN tilinumero ilman FI ja tarkistussummaa (16 numeroa)
+    const tilinumero = (props.organization.pankkitili || 'FI0000000000000000')
+      .replace(/\s/g, '')
+      .replace(/^FI\d{2}/, '') // Poistetaan FI ja tarkistussumma
+    
+    if (tilinumero.length !== 14) {
+      console.error('Virheellinen IBAN-tilinumero:', props.organization.pankkitili)
+      return ''
+    }
+    
+    // 2. Summa sentteinä (8 numeroa)
+    const summa = Math.round((props.invoice.summa || 0) * 100)
+      .toString()
+      .padStart(8, '0')
+    
+    // 3. Viitenumero (max 20 numeroa, täytetään nollilla)
+    let viitenumero = (props.invoice.viitenumero || '').replace(/\s/g, '')
+    if (viitenumero.length > 20) {
+      viitenumero = viitenumero.slice(0, 20)
+    }
+    viitenumero = viitenumero.padStart(20, '0')
+    
+    // 4. Eräpäivä YYMMDD muodossa
+    let erapaiva = '000000'
+    if (props.invoice.erapaiva) {
+      const date = new Date(props.invoice.erapaiva)
+      const yy = date.getFullYear().toString().slice(-2)
+      const mm = (date.getMonth() + 1).toString().padStart(2, '0')
+      const dd = date.getDate().toString().padStart(2, '0')
+      erapaiva = yy + mm + dd
+    }
+    
+    // 5. Muodostetaan pankkiviivakoodi (versio 4)
+    // Versio 4: IBAN-pohjainen kotimaan maksu
+    const barcode = `4${tilinumero}${summa}000${viitenumero}${erapaiva}`
+    
+    console.log('Pankkiviivakoodin osat:', {
+      versio: '4',
+      tilinumero: tilinumero,
+      summa: summa,
+      reservi: '000',
+      viitenumero: viitenumero,
+      erapaiva: erapaiva,
+      kokokoodi: barcode
+    })
+    
+    return barcode
+  } catch (error) {
+    console.error('Virhe pankkiviivakoodin luonnissa:', error)
+    return ''
+  }
 }
 
 

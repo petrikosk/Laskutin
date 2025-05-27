@@ -362,12 +362,37 @@
         </div>
       </div>
     </div>
+
+    <!-- Vahvistus dialogi -->
+    <ConfirmDialog
+      :show="showConfirmDialog"
+      title="Vahvista poisto"
+      :message="confirmMessage"
+      type="danger"
+      icon="danger"
+      confirm-text="Poista"
+      cancel-text="Peruuta"
+      @confirm="confirmDeleteMember"
+      @cancel="cancelDeleteMember"
+    />
+
+    <!-- Virhe dialogi -->
+    <AlertDialog
+      :show="showErrorDialog"
+      title="Virhe"
+      :message="errorMessage"
+      type="error"
+      icon="error"
+      @close="showErrorDialog = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import ConfirmDialog from './ConfirmDialog.vue'
+import AlertDialog from './AlertDialog.vue'
 
 interface Member {
   id: number
@@ -403,6 +428,11 @@ const filterActive = ref('')
 const showModal = ref(false)
 const editingMember = ref<Member | null>(null)
 const validationError = ref('')
+const showConfirmDialog = ref(false)
+const showErrorDialog = ref(false)
+const confirmMessage = ref('')
+const errorMessage = ref('')
+const memberToDelete = ref<Member | null>(null)
 
 const memberForm = ref({
   etunimi: '',
@@ -633,17 +663,32 @@ const saveMember = async () => {
 }
 
 const deleteMember = async (member: Member) => {
-  if (confirm(`Haluatko varmasti poistaa jäsenen ${member.etunimi} ${member.sukunimi}?`)) {
-    try {
-      // TODO: Backend huolehtii talouden automaattisesta poistosta jos se jää tyhjäksi
-      await invoke('delete_member', { id: member.id })
-      await loadMembers()
-      await loadTaloudet() // Päivitä myös taloudet jos jokin poistettiin
-    } catch (error) {
-      console.error('Virhe poistaessa jäsentä:', error)
-      alert('Virhe poistaessa jäsentä')
-    }
+  memberToDelete.value = member
+  confirmMessage.value = `Haluatko varmasti poistaa jäsenen ${member.etunimi} ${member.sukunimi}?`
+  showConfirmDialog.value = true
+}
+
+const confirmDeleteMember = async () => {
+  if (!memberToDelete.value) return
+  
+  showConfirmDialog.value = false
+  try {
+    // TODO: Backend huolehtii talouden automaattisesta poistosta jos se jää tyhjäksi
+    await invoke('delete_member', { id: memberToDelete.value.id })
+    await loadMembers()
+    await loadTaloudet() // Päivitä myös taloudet jos jokin poistettiin
+  } catch (error) {
+    console.error('Virhe poistaessa jäsentä:', error)
+    errorMessage.value = 'Virhe poistaessa jäsentä'
+    showErrorDialog.value = true
+  } finally {
+    memberToDelete.value = null
   }
+}
+
+const cancelDeleteMember = () => {
+  showConfirmDialog.value = false
+  memberToDelete.value = null
 }
 
 const loadTaloudet = async () => {

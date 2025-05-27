@@ -217,12 +217,23 @@
       @confirm="confirmDialog.onConfirm"
       @cancel="closeConfirmDialog"
     />
+
+    <!-- Virhe dialogi -->
+    <AlertDialog
+      :show="showErrorDialog"
+      title="Virhe"
+      :message="errorMessage"
+      type="error"
+      icon="error"
+      @close="showErrorDialog = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import AlertDialog from './AlertDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { formatDate } from '../utils/dateUtils'
 
@@ -239,6 +250,8 @@ const filterYear = ref('')
 const filterType = ref('')
 const showModal = ref(false)
 const editingFee = ref<MembershipFee | null>(null)
+const showErrorDialog = ref(false)
+const errorMessage = ref('')
 
 const confirmDialog = ref({
   show: false,
@@ -383,7 +396,8 @@ const saveFee = async () => {
     closeModal()
   } catch (error) {
     console.error('Virhe tallentaessa jäsenmaksua:', error)
-    alert('Virhe tallentaessa jäsenmaksua: ' + error)
+    errorMessage.value = 'Virhe tallentaessa jäsenmaksua: ' + error
+    showErrorDialog.value = true
   }
 }
 
@@ -403,7 +417,8 @@ const deleteFee = async (fee: MembershipFee) => {
         await loadFees()
       } catch (error) {
         console.error('Virhe poistaessa jäsenmaksua:', error)
-        alert('Virhe poistaessa jäsenmaksua')
+        errorMessage.value = 'Virhe poistaessa jäsenmaksua'
+      showErrorDialog.value = true
       }
     }
   })

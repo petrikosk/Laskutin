@@ -294,6 +294,16 @@
       :message="successNotification.message"
       @close="closeSuccessNotification"
     />
+
+    <!-- Virhe dialogi -->
+    <AlertDialog
+      :show="showErrorDialog"
+      title="Virhe"
+      :message="errorMessage"
+      type="error"
+      icon="error"
+      @close="showErrorDialog = false"
+    />
   </div>
 </template>
 
@@ -305,6 +315,7 @@ import ConfirmDialog from './ConfirmDialog.vue'
 import DateInput from './DateInput.vue'
 import PaymentDialog from './PaymentDialog.vue'
 import SuccessNotification from './SuccessNotification.vue'
+import AlertDialog from './AlertDialog.vue'
 import { generateAndSavePDF, printInvoice as printInvoiceUtil } from '../utils/pdfGenerator'
 import { formatDate } from '../utils/dateUtils'
 
@@ -336,6 +347,8 @@ const pdfComponentRef = ref<InstanceType<typeof InvoicePDF> | null>(null)
 const organization = ref<any>(null)
 const showPaymentDialog = ref(false)
 const selectedInvoiceForPayment = ref<Invoice | null>(null)
+const showErrorDialog = ref(false)
+const errorMessage = ref('')
 
 const successNotification = ref({
   show: false,
@@ -447,13 +460,15 @@ const createInvoices = async () => {
           )
         } catch (error: unknown) {
           console.error('Virhe luodessa laskuja:', error)
-          alert('Virhe luodessa laskuja: ' + String(error))
+          errorMessage.value = 'Virhe luodessa laskuja: ' + String(error)
+          showErrorDialog.value = true
         }
       }
     })
   } catch (error: unknown) {
     console.error('Virhe luodessa laskuja:', error)
-    alert('Virhe luodessa laskuja: ' + String(error))
+    errorMessage.value = 'Virhe luodessa laskuja: ' + String(error)
+    showErrorDialog.value = true
   }
 }
 
@@ -482,7 +497,8 @@ const handlePaymentConfirm = async (paymentDate: string) => {
     )
   } catch (error: unknown) {
     console.error('Virhe merkitessä laskua maksetuksi:', error)
-    alert('Virhe merkitessä laskua maksetuksi: ' + String(error))
+    errorMessage.value = 'Virhe merkitessä laskua maksetuksi: ' + String(error)
+    showErrorDialog.value = true
   }
 }
 
@@ -517,7 +533,8 @@ const handlePrint = async () => {
     selectedInvoice.value = null
   } catch (error: unknown) {
     console.error('Virhe tulostuksessa:', error)
-    alert('Tulostus epäonnistui: ' + (error instanceof Error ? error.message : String(error)))
+    errorMessage.value = 'Tulostus epäonnistui: ' + (error instanceof Error ? error.message : String(error))
+    showErrorDialog.value = true
   }
 }
 
@@ -533,7 +550,8 @@ const handleDownloadPDF = async () => {
     selectedInvoice.value = null
   } catch (error: unknown) {
     console.error('Virhe PDF:n luonnissa:', error)
-    alert('PDF:n luonti epäonnistui: ' + (error instanceof Error ? error.message : String(error)))
+    errorMessage.value = 'PDF:n luonti epäonnistui: ' + (error instanceof Error ? error.message : String(error))
+    showErrorDialog.value = true
   }
 }
 
@@ -556,7 +574,8 @@ const deleteInvoice = async (invoice: Invoice) => {
         await loadInvoices()
       } catch (error) {
         console.error('Virhe poistaessa laskua:', error)
-        alert('Virhe poistaessa laskua')
+        errorMessage.value = 'Virhe poistaessa laskua'
+        showErrorDialog.value = true
       }
     }
   })

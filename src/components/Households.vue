@@ -190,12 +190,37 @@
         </div>
       </div>
     </div>
+
+    <!-- Vahvistus dialogi -->
+    <ConfirmDialog
+      :show="showConfirmDialog"
+      title="Vahvista poisto"
+      :message="confirmMessage"
+      type="danger"
+      icon="danger"
+      confirm-text="Poista"
+      cancel-text="Peruuta"
+      @confirm="confirmDeleteHousehold"
+      @cancel="cancelDeleteHousehold"
+    />
+
+    <!-- Virhe dialogi -->
+    <AlertDialog
+      :show="showErrorDialog"
+      title="Virhe"
+      :message="errorMessage"
+      type="error"
+      icon="error"
+      @close="showErrorDialog = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import ConfirmDialog from './ConfirmDialog.vue'
+import AlertDialog from './AlertDialog.vue'
 
 interface Address {
   id: number
@@ -224,6 +249,11 @@ const searchTerm = ref('')
 const showModal = ref(false)
 const editingHousehold = ref<Household | null>(null)
 const validationError = ref('')
+const showConfirmDialog = ref(false)
+const showErrorDialog = ref(false)
+const confirmMessage = ref('')
+const errorMessage = ref('')
+const householdToDelete = ref<Household | null>(null)
 
 // Form data
 const householdForm = ref({
@@ -324,16 +354,31 @@ const saveHousehold = async () => {
 }
 
 const deleteHousehold = async (household: Household) => {
-  if (confirm(`Haluatko varmasti poistaa talouden "${household.talouden_nimi || `Talous ${household.id}`}"? Tämä poistaa myös kaikki talouden jäsenet.`)) {
-    try {
-      console.log('Delete household:', household.id)
-      await invoke('delete_household', { id: household.id })
-      await loadHouseholds()
-    } catch (error) {
-      console.error('Virhe poistaessa taloutta:', error)
-      alert('Virhe poistaessa taloutta')
-    }
+  householdToDelete.value = household
+  confirmMessage.value = `Haluatko varmasti poistaa talouden "${household.talouden_nimi || `Talous ${household.id}`}"? Tämä poistaa myös kaikki talouden jäsenet.`
+  showConfirmDialog.value = true
+}
+
+const confirmDeleteHousehold = async () => {
+  if (!householdToDelete.value) return
+  
+  showConfirmDialog.value = false
+  try {
+    console.log('Delete household:', householdToDelete.value.id)
+    await invoke('delete_household', { id: householdToDelete.value.id })
+    await loadHouseholds()
+  } catch (error) {
+    console.error('Virhe poistaessa taloutta:', error)
+    errorMessage.value = 'Virhe poistaessa taloutta'
+    showErrorDialog.value = true
+  } finally {
+    householdToDelete.value = null
   }
+}
+
+const cancelDeleteHousehold = () => {
+  showConfirmDialog.value = false
+  householdToDelete.value = null
 }
 
 const loadHouseholds = async () => {
