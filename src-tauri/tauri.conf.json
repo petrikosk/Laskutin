@@ -24,6 +24,33 @@
       "csp": null
     }
   },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "msi",
+      "nsis",
+      "deb",
+      "appimage"
+    ],
+    "publisher": "Petri Koskinen",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
+  },
   "plugins": {
     "fs": {
       "requireLiteralLeadingDot": false
