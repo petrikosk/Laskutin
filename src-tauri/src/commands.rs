@@ -42,6 +42,7 @@ pub async fn create_member(
 #[tauri::command]
 pub async fn create_member_with_address(
     db: State<'_, DbState>,
+    #[allow(non_snake_case)]
     memberData: serde_json::Value,
 ) -> Result<Member, String> {
     let db = db.lock().await;

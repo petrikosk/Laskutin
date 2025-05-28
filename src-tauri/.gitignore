@@ -12,5 +12,5 @@
 *.sqlite
 *.sqlite3
 
-# Keep .sqlx directory for offline compilation
-!.sqlx/
+# SQLX offline data (generated during compilation)
+.sqlx/

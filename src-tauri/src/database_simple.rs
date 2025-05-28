@@ -1,6 +1,6 @@
 use crate::models::*;
 use anyhow::Result;
-use sqlx::{Pool, Sqlite, Row, migrate::MigrateDatabase};
+use sqlx::{migrate::MigrateDatabase, Pool, Row, Sqlite};
 use std::path::PathBuf;
 
 pub struct Database {
@@ -9,13 +9,17 @@ pub struct Database {
 
 impl Database {
     pub async fn new() -> Result<Self> {
-        let app_data_dir = dirs::data_dir()
-            .map(|dir| dir.join("laskutin"))
-            .unwrap_or_else(|| PathBuf::from("."));
+        // Use local dev database in debug mode, production database in release mode
+        let db_path = if cfg!(debug_assertions) {
+            PathBuf::from("dev-database.db")
+        } else {
+            let app_data_dir = dirs::data_dir()
+                .map(|dir| dir.join("laskutin"))
+                .unwrap_or_else(|| PathBuf::from("."));
+            std::fs::create_dir_all(&app_data_dir)?;
+            app_data_dir.join("laskutin.db")
+        };
 
-        std::fs::create_dir_all(&app_data_dir)?;
-
-        let db_path = app_data_dir.join("laskutin.db");
         let db_url = format!("sqlite://{}", db_path.to_string_lossy());
 
         // Create database if it doesn't exist
@@ -76,7 +80,7 @@ impl Database {
         let id = sqlx::query(
             "INSERT INTO members (etunimi, sukunimi, henkilotunnus, syntymaaika, 
              puhelinnumero, sahkoposti, osoite_id, liittymispaiva, jasentyyppi, aktiivinen)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&member.etunimi)
         .bind(&member.sukunimi)
@@ -93,12 +97,10 @@ impl Database {
         .last_insert_rowid();
 
         // Fetch and return the created member
-        let row = sqlx::query(
-            "SELECT * FROM members WHERE id = ?"
-        )
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+        let row = sqlx::query("SELECT * FROM members WHERE id = ?")
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await?;
 
         Ok(Member {
             id: row.get("id"),
@@ -120,7 +122,7 @@ impl Database {
     pub async fn create_address(&self, address: &CreateAddress) -> Result<Address> {
         let id = sqlx::query(
             "INSERT INTO addresses (katuosoite, postinumero, postitoimipaikka, talous_id)
-             VALUES (?, ?, ?, ?)"
+             VALUES (?, ?, ?, ?)",
         )
         .bind(&address.katuosoite)
         .bind(&address.postinumero)
@@ -154,7 +156,7 @@ impl Database {
              FROM members m
              JOIN addresses a ON m.osoite_id = a.id
              JOIN households h ON a.talous_id = h.id
-             ORDER BY m.sukunimi, m.etunimi"
+             ORDER BY m.sukunimi, m.etunimi",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -263,7 +265,7 @@ impl Database {
              etunimi = ?, sukunimi = ?, henkilotunnus = ?, syntymaaika = ?,
              puhelinnumero = ?, sahkoposti = ?, osoite_id = ?, liittymispaiva = ?,
              jasentyyppi = ?, aktiivinen = ?, updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?"
+             WHERE id = ?",
         )
         .bind(&member.etunimi)
         .bind(&member.sukunimi)
@@ -280,12 +282,10 @@ impl Database {
         .await?;
 
         // Fetch and return the updated member
-        let row = sqlx::query(
-            "SELECT * FROM members WHERE id = ?"
-        )
-        .bind(id)
-        .fetch_one(&self.pool)
-        .await?;
+        let row = sqlx::query("SELECT * FROM members WHERE id = ?")
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await?;
 
         Ok(Member {
             id: row.get("id"),
@@ -307,60 +307,59 @@ impl Database {
     pub async fn delete_member(&self, id: i64) -> Result<()> {
         // Start a transaction to ensure data consistency
         let mut transaction = self.pool.begin().await?;
-        
+
         // Check if member has invoice lines
-        let invoice_lines_count = sqlx::query(
-            "SELECT COUNT(*) as count FROM invoice_lines WHERE jasen_id = ?"
-        )
-        .bind(id)
-        .fetch_one(&mut *transaction)
-        .await?
-        .get::<i64, _>("count");
-        
+        let invoice_lines_count =
+            sqlx::query("SELECT COUNT(*) as count FROM invoice_lines WHERE jasen_id = ?")
+                .bind(id)
+                .fetch_one(&mut *transaction)
+                .await?
+                .get::<i64, _>("count");
+
         if invoice_lines_count > 0 {
             transaction.rollback().await?;
             return Err(anyhow::anyhow!(
                 "Jäsentä ei voi poistaa, koska siihen liittyy laskurivejä. Poista ensin laskut."
             ));
         }
-        
+
         // Get member's household info before deletion for cleanup
         let household_info = sqlx::query(
             "SELECT a.talous_id, COUNT(m.id) as member_count 
              FROM addresses a 
              LEFT JOIN members m ON m.osoite_id = a.id 
              WHERE a.id = (SELECT osoite_id FROM members WHERE id = ?)
-             GROUP BY a.talous_id"
+             GROUP BY a.talous_id",
         )
         .bind(id)
         .fetch_optional(&mut *transaction)
         .await?;
-        
+
         // Delete the member
         let affected_rows = sqlx::query("DELETE FROM members WHERE id = ?")
             .bind(id)
             .execute(&mut *transaction)
             .await?
             .rows_affected();
-        
+
         if affected_rows == 0 {
             transaction.rollback().await?;
             return Err(anyhow::anyhow!("Jäsentä ei löytynyt ID:llä {}", id));
         }
-        
+
         // Check if household became empty and clean up if needed
         if let Some(household_row) = household_info {
             let household_id: i64 = household_row.get("talous_id");
             let remaining_members = sqlx::query(
                 "SELECT COUNT(*) as count FROM members m 
                  JOIN addresses a ON m.osoite_id = a.id 
-                 WHERE a.talous_id = ?"
+                 WHERE a.talous_id = ?",
             )
             .bind(household_id)
             .fetch_one(&mut *transaction)
             .await?
             .get::<i64, _>("count");
-            
+
             // If no members left in household, delete the household and its address
             if remaining_members == 0 {
                 // Delete address first (which will cascade delete members if any remain)
@@ -368,7 +367,7 @@ impl Database {
                     .bind(household_id)
                     .execute(&mut *transaction)
                     .await?;
-                
+
                 // Delete household
                 sqlx::query("DELETE FROM households WHERE id = ?")
                     .bind(household_id)
@@ -376,7 +375,7 @@ impl Database {
                     .await?;
             }
         }
-        
+
         // Commit the transaction
         transaction.commit().await?;
         Ok(())
@@ -412,7 +411,7 @@ impl Database {
                 a.created_at as address_created_at, a.updated_at as address_updated_at
              FROM households h
              JOIN addresses a ON h.id = a.talous_id
-             ORDER BY h.talouden_nimi"
+             ORDER BY h.talouden_nimi",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -480,7 +479,7 @@ impl Database {
                 Ok(val) => val,
                 Err(_) => row.get::<i64, _>("summa") as f64,
             };
-            
+
             fees.push(MembershipFee {
                 id: row.get("id"),
                 vuosi: row.get("vuosi"),
@@ -497,7 +496,7 @@ impl Database {
     pub async fn create_membership_fee(&self, fee: &CreateMembershipFee) -> Result<MembershipFee> {
         let id = sqlx::query(
             "INSERT INTO membership_fees (vuosi, jasentyyppi, summa)
-             VALUES (?, ?, ?)"
+             VALUES (?, ?, ?)",
         )
         .bind(fee.vuosi)
         .bind(&fee.jasentyyppi.to_string())
@@ -516,9 +515,13 @@ impl Database {
         })
     }
 
-    pub async fn update_membership_fee(&self, id: i64, fee: &CreateMembershipFee) -> Result<MembershipFee> {
+    pub async fn update_membership_fee(
+        &self,
+        id: i64,
+        fee: &CreateMembershipFee,
+    ) -> Result<MembershipFee> {
         sqlx::query(
-            "UPDATE membership_fees SET summa = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            "UPDATE membership_fees SET summa = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
         .bind(fee.summa)
         .bind(id)
@@ -565,7 +568,7 @@ impl Database {
         .await?;
 
         let mut invoices_with_details = Vec::new();
-        
+
         for row in rows {
             let summa = match row.try_get::<f64, _>("summa") {
                 Ok(val) => val,
@@ -671,23 +674,23 @@ impl Database {
 
     pub async fn validate_invoice_creation(&self, year: i32) -> Result<String> {
         // Tarkista että jäsenmaksut on määritelty kaikille jäsentyypeille
-        let member_types = sqlx::query(
-            "SELECT DISTINCT jasentyyppi FROM members WHERE aktiivinen = 1"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let member_types =
+            sqlx::query("SELECT DISTINCT jasentyyppi FROM members WHERE aktiivinen = 1")
+                .fetch_all(&self.pool)
+                .await?;
 
         let mut missing_fees = Vec::new();
         for type_row in member_types {
             let member_type: String = type_row.get("jasentyyppi");
             let fee_exists = sqlx::query(
-                "SELECT COUNT(*) as count FROM membership_fees WHERE jasentyyppi = ? AND vuosi = ?"
+                "SELECT COUNT(*) as count FROM membership_fees WHERE jasentyyppi = ? AND vuosi = ?",
             )
             .bind(&member_type)
             .bind(year)
             .fetch_one(&self.pool)
             .await?
-            .get::<i64, _>("count") > 0;
+            .get::<i64, _>("count")
+                > 0;
 
             if !fee_exists {
                 missing_fees.push(member_type);
@@ -703,12 +706,11 @@ impl Database {
         }
 
         // Tarkista että on aktiivisia jäseniä
-        let active_members = sqlx::query(
-            "SELECT COUNT(*) as count FROM members WHERE aktiivinen = 1"
-        )
-        .fetch_one(&self.pool)
-        .await?
-        .get::<i64, _>("count");
+        let active_members =
+            sqlx::query("SELECT COUNT(*) as count FROM members WHERE aktiivinen = 1")
+                .fetch_one(&self.pool)
+                .await?
+                .get::<i64, _>("count");
 
         if active_members == 0 {
             return Err(anyhow::anyhow!("Ei aktiivisia jäseniä laskutettavaksi."));
@@ -726,7 +728,7 @@ impl Database {
                  SELECT 1 FROM invoices i 
                  WHERE i.talous_id = h.id 
                  AND strftime('%Y', i.luontipaiva) = CAST(? as TEXT)
-             )"
+             )",
         )
         .bind(year)
         .bind(year)
@@ -737,7 +739,7 @@ impl Database {
         // Tarkista onko jo kaikille luotu laskut
         let existing_invoices = sqlx::query(
             "SELECT COUNT(*) as count FROM invoices 
-             WHERE strftime('%Y', luontipaiva) = CAST(? as TEXT)"
+             WHERE strftime('%Y', luontipaiva) = CAST(? as TEXT)",
         )
         .bind(year)
         .fetch_one(&self.pool)
@@ -748,10 +750,14 @@ impl Database {
             if existing_invoices > 0 {
                 return Err(anyhow::anyhow!(
                     "Laskut on jo luotu vuodelle {}. {} laskua olemassa.",
-                    year, existing_invoices
+                    year,
+                    existing_invoices
                 ));
             } else {
-                return Err(anyhow::anyhow!("Ei laskutettavia jäseniä vuodelle {}.", year));
+                return Err(anyhow::anyhow!(
+                    "Ei laskutettavia jäseniä vuodelle {}.",
+                    year
+                ));
             }
         }
 
@@ -771,7 +777,6 @@ impl Database {
     }
 
     pub async fn create_invoice_for_year(&self, year: i32) -> Result<Vec<Invoice>> {
-
         // Hae vain ne taloudet joilla ei ole vielä laskua tälle vuodelle
         let households = sqlx::query(
             "SELECT DISTINCT h.id as household_id, h.talouden_nimi, h.vastaanottaja
@@ -784,7 +789,7 @@ impl Database {
                  SELECT 1 FROM invoices i 
                  WHERE i.talous_id = h.id 
                  AND strftime('%Y', i.luontipaiva) = CAST(? as TEXT)
-             )"
+             )",
         )
         .bind(year)
         .bind(year)
@@ -797,7 +802,7 @@ impl Database {
 
         for household_row in households {
             let household_id: i64 = household_row.get("household_id");
-            
+
             // Hae jäsenmaksut tälle vuodelle
             let members = sqlx::query(
                 "SELECT m.id, m.etunimi, m.sukunimi, m.jasentyyppi, mf.summa
@@ -805,7 +810,7 @@ impl Database {
                  JOIN addresses a ON m.osoite_id = a.id
                  JOIN households h ON a.talous_id = h.id
                  JOIN membership_fees mf ON m.jasentyyppi = mf.jasentyyppi AND mf.vuosi = ?
-                 WHERE h.id = ? AND m.aktiivinen = 1"
+                 WHERE h.id = ? AND m.aktiivinen = 1",
             )
             .bind(year)
             .bind(household_id)
@@ -813,7 +818,8 @@ impl Database {
             .await?;
 
             // Laske kokonaissumma
-            let total_sum: f64 = members.iter()
+            let total_sum: f64 = members
+                .iter()
                 .map(|row| {
                     // Kokeile ensin f64, sitten i64 ja muunna
                     match row.try_get::<f64, _>("summa") {
@@ -859,7 +865,7 @@ impl Database {
 
                 sqlx::query(
                     "INSERT INTO invoice_lines (lasku_id, jasen_id, kuvaus, summa)
-                     VALUES (?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?)",
                 )
                 .bind(invoice_id)
                 .bind(member_id)
@@ -890,7 +896,11 @@ impl Database {
         Ok(created_invoices)
     }
 
-    pub async fn mark_invoice_paid(&self, id: i64, payment_date: chrono::NaiveDate) -> Result<Invoice> {
+    pub async fn mark_invoice_paid(
+        &self,
+        id: i64,
+        payment_date: chrono::NaiveDate,
+    ) -> Result<Invoice> {
         // Päivitä lasku maksetuksi
         sqlx::query(
             "UPDATE invoices SET maksettu = 1, maksupaiva = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
@@ -911,9 +921,9 @@ impl Database {
             talous_id: row.get("talous_id"),
             luontipaiva: row.get("luontipaiva"),
             erapaiva: row.get("erapaiva"),
-            summa: row.try_get::<f64, _>("summa").unwrap_or_else(|_| {
-                row.get::<i64, _>("summa") as f64
-            }),
+            summa: row
+                .try_get::<f64, _>("summa")
+                .unwrap_or_else(|_| row.get::<i64, _>("summa") as f64),
             viitenumero: row.get("viitenumero"),
             laskunumero: row.get("laskunumero"),
             maksettu: row.get::<i64, _>("maksettu") != 0,
@@ -929,13 +939,13 @@ impl Database {
             .bind(id)
             .execute(&self.pool)
             .await?;
-        
+
         // Poista lasku
         sqlx::query("DELETE FROM invoices WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
-        
+
         Ok(())
     }
 
@@ -947,7 +957,13 @@ impl Database {
         Ok(())
     }
 
-    pub async fn update_address(&self, address_id: i64, katuosoite: &str, postinumero: &str, postitoimipaikka: &str) -> Result<()> {
+    pub async fn update_address(
+        &self,
+        address_id: i64,
+        katuosoite: &str,
+        postinumero: &str,
+        postitoimipaikka: &str,
+    ) -> Result<()> {
         sqlx::query(
             "UPDATE addresses SET katuosoite = ?, postinumero = ?, postitoimipaikka = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         )
@@ -968,12 +984,16 @@ impl Database {
         Ok(row.get("osoite_id"))
     }
 
-    pub async fn update_household(&self, id: i64, household: &CreateHousehold) -> Result<Household> {
+    pub async fn update_household(
+        &self,
+        id: i64,
+        household: &CreateHousehold,
+    ) -> Result<Household> {
         sqlx::query(
             "UPDATE households SET 
              talouden_nimi = ?, vastaanottaja = ?, laskutusosoite_sama = ?, laskutusosoite_id = ?, 
              updated_at = CURRENT_TIMESTAMP
-             WHERE id = ?"
+             WHERE id = ?",
         )
         .bind(&household.talouden_nimi)
         .bind(&household.vastaanottaja)
@@ -1000,12 +1020,18 @@ impl Database {
         })
     }
 
-    pub async fn update_household_address(&self, household_id: i64, katuosoite: &str, postinumero: &str, postitoimipaikka: &str) -> Result<()> {
+    pub async fn update_household_address(
+        &self,
+        household_id: i64,
+        katuosoite: &str,
+        postinumero: &str,
+        postitoimipaikka: &str,
+    ) -> Result<()> {
         sqlx::query(
             "UPDATE addresses SET 
              katuosoite = ?, postinumero = ?, postitoimipaikka = ?, 
              updated_at = CURRENT_TIMESTAMP 
-             WHERE talous_id = ?"
+             WHERE talous_id = ?",
         )
         .bind(katuosoite)
         .bind(postinumero)
@@ -1018,10 +1044,12 @@ impl Database {
 
     pub async fn delete_household(&self, id: i64) -> Result<()> {
         // First, delete all members in this household
-        sqlx::query("DELETE FROM members WHERE osoite_id IN (SELECT id FROM addresses WHERE talous_id = ?)")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "DELETE FROM members WHERE osoite_id IN (SELECT id FROM addresses WHERE talous_id = ?)",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
 
         // Delete the address
         sqlx::query("DELETE FROM addresses WHERE talous_id = ?")
@@ -1042,7 +1070,7 @@ impl Database {
         let row = sqlx::query(
             "SELECT COUNT(*) as count FROM members m 
              JOIN addresses a ON m.osoite_id = a.id 
-             WHERE a.talous_id = ?"
+             WHERE a.talous_id = ?",
         )
         .bind(household_id)
         .fetch_one(&self.pool)
@@ -1066,30 +1094,31 @@ impl Database {
     }
 
     pub async fn get_total_receivables(&self) -> Result<f64> {
-        let row = sqlx::query("SELECT COALESCE(SUM(summa), 0) as total FROM invoices WHERE maksettu = 0")
-            .fetch_one(&self.pool)
-            .await?;
-        
+        let row =
+            sqlx::query("SELECT COALESCE(SUM(summa), 0) as total FROM invoices WHERE maksettu = 0")
+                .fetch_one(&self.pool)
+                .await?;
+
         // Handle both f64 and i64 types from SQLite
-        let total = row.try_get::<f64, _>("total").unwrap_or_else(|_| {
-            row.get::<i64, _>("total") as f64
-        });
+        let total = row
+            .try_get::<f64, _>("total")
+            .unwrap_or_else(|_| row.get::<i64, _>("total") as f64);
         Ok(total)
     }
 
     pub async fn get_yearly_income(&self, year: i32) -> Result<f64> {
         let row = sqlx::query(
             "SELECT COALESCE(SUM(summa), 0) as total FROM invoices 
-             WHERE maksettu = 1 AND strftime('%Y', maksupaiva) = ?"
+             WHERE maksettu = 1 AND strftime('%Y', maksupaiva) = ?",
         )
         .bind(year.to_string())
         .fetch_one(&self.pool)
         .await?;
-        
+
         // Handle both f64 and i64 types from SQLite
-        let total = row.try_get::<f64, _>("total").unwrap_or_else(|_| {
-            row.get::<i64, _>("total") as f64
-        });
+        let total = row
+            .try_get::<f64, _>("total")
+            .unwrap_or_else(|_| row.get::<i64, _>("total") as f64);
         Ok(total)
     }
 }

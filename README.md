@@ -41,9 +41,40 @@ cd Laskutin
 # Install dependencies
 pnpm install
 
+# Set up development database
+./setup-dev-db.sh        # Linux/macOS
+# OR
+setup-dev-db.bat         # Windows
+
 # Start development server
 npm run tauri dev
 ```
+
+### Development Database Setup
+
+The application requires a SQLite database for development. The database setup scripts create a local development database with sample data:
+
+**Linux/macOS:**
+```bash
+./setup-dev-db.sh
+```
+
+**Windows:**
+```batch
+setup-dev-db.bat
+```
+
+**What the setup script does:**
+- Creates `dev-database.db` in the project root
+- Runs all database migrations (001_initial.sql, 002_add_fields.sql)
+- Populates sample data (organization, households, members, membership fees)
+- Required for successful compilation due to SQLX compile-time verification
+- SQLX metadata (`.sqlx/` directory) is generated automatically during compilation
+
+**Database Behavior:**
+- **Development mode**: Uses `dev-database.db` in project root
+- **Production mode**: Uses user data directory (`~/.local/share/laskutin/` on Linux)
+- Development database is excluded from Git and production builds
 
 ### Building
 
@@ -110,13 +141,45 @@ Key Tauri commands exposed to frontend:
 - Frontend uses camelCase, backend uses snake_case
 - Custom CSS styling (Tailwind removed due to ES module conflicts)
 
+## Troubleshooting
+
+### Database Issues
+
+**Error: "unable to open database file" during compilation or IDE errors**
+```bash
+# Run the database setup script
+./setup-dev-db.sh
+
+# The first compilation will generate SQLX metadata automatically
+# If you still get IDE errors, try building once:
+pnpm run tauri build --debug
+```
+
+**Error: "No such file or directory" when running setup script**
+```bash
+# Make sure you're in the project root directory
+chmod +x setup-dev-db.sh
+./setup-dev-db.sh
+```
+
+**Missing SQLite on Windows**
+- Install SQLite from https://sqlite.org/download.html
+- Add SQLite to your PATH
+
+### Graphics Issues (WSL)
+
+If you encounter graphics-related errors in WSL, set:
+```bash
+export LIBGL_ALWAYS_INDIRECT=1
+```
+
 ## Environment
 
 Optimized for:
 - WSL2 + Ubuntu
 - Node.js 20.x
 - Rust stable toolchain
-- Set `LIBGL_ALWAYS_INDIRECT=1` for graphics rendering in WSL
+- SQLite 3.x
 
 ## Recommended IDE Setup
 
