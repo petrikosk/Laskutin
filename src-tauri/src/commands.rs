@@ -139,17 +139,67 @@ pub async fn update_member_with_address(
 ) -> Result<Member, String> {
     let db = db.lock().await;
     
-    // First update the address if provided
-    if let (Some(katuosoite), Some(postinumero), Some(postitoimipaikka)) = (
-        member_data["katuosoite"].as_str(),
-        member_data["postinumero"].as_str(), 
-        member_data["postitoimipaikka"].as_str()
-    ) {
-        let address_id = db.get_member_address_id(id).await.map_err(|e| e.to_string())?;
-        db.update_address(address_id, katuosoite, postinumero, postitoimipaikka)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
+    // Get the old address_id for potential cleanup
+    let old_address_id = db.get_member_address_id(id).await.map_err(|e| e.to_string())?;
+    
+    // Extract data from the frontend payload
+    let osoitetyyppi = member_data["osoitetyyppi"].as_str().unwrap_or("keep");
+    
+    let address_id = match osoitetyyppi {
+        "talous" => {
+            // Join existing household - get address_id from the selected household
+            let talous_id = member_data["talous_id"].as_i64()
+                .ok_or("talous_id is required when joining existing household")?;
+            
+            // Get the address_id from the selected household
+            db.get_household_address_id(talous_id).await.map_err(|e| e.to_string())?
+        },
+        "oma" | "uusi" => {
+            // Create new household and address
+            let household_name = if osoitetyyppi == "uusi" {
+                member_data["talouden_nimi"].as_str().map(|s| s.to_string())
+            } else {
+                Some(format!("{} {}", 
+                    member_data["etunimi"].as_str().unwrap_or(""),
+                    member_data["sukunimi"].as_str().unwrap_or("")))
+            };
+            
+            let household = CreateHousehold {
+                talouden_nimi: household_name.clone(),
+                vastaanottaja: household_name,
+                laskutusosoite_sama: true,
+                laskutusosoite_id: None,
+            };
+            
+            let created_household = db.create_household(&household).await
+                .map_err(|e| e.to_string())?;
+            
+            let address = CreateAddress {
+                katuosoite: member_data["katuosoite"].as_str().unwrap_or("").to_string(),
+                postinumero: member_data["postinumero"].as_str().unwrap_or("").to_string(),
+                postitoimipaikka: member_data["postitoimipaikka"].as_str().unwrap_or("").to_string(),
+                talous_id: created_household.id,
+            };
+            
+            let created_address = db.create_address(&address).await
+                .map_err(|e| e.to_string())?;
+            
+            created_address.id
+        },
+        _ => {
+            // Keep existing address but update it if address data is provided
+            if let (Some(katuosoite), Some(postinumero), Some(postitoimipaikka)) = (
+                member_data["katuosoite"].as_str(),
+                member_data["postinumero"].as_str(), 
+                member_data["postitoimipaikka"].as_str()
+            ) {
+                db.update_address(old_address_id, katuosoite, postinumero, postitoimipaikka)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            old_address_id
+        }
+    };
     
     // Parse member type
     let member_type_str = member_data["jasentyyppi"].as_str().unwrap_or("Varsinainen");
@@ -164,9 +214,6 @@ pub async fn update_member_with_address(
         .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
         .unwrap_or_else(|| chrono::Utc::now().date_naive());
     
-    // Get current osoite_id (don't change it for existing members)
-    let address_id = db.get_member_address_id(id).await.map_err(|e| e.to_string())?;
-    
     let member = CreateMember {
         etunimi: member_data["etunimi"].as_str().unwrap_or("").to_string(),
         sukunimi: member_data["sukunimi"].as_str().unwrap_or("").to_string(),
@@ -180,7 +227,14 @@ pub async fn update_member_with_address(
         aktiivinen: member_data["aktiivinen"].as_bool().unwrap_or(true),
     };
     
-    db.update_member(id, &member).await.map_err(|e| e.to_string())
+    let updated_member = db.update_member(id, &member).await.map_err(|e| e.to_string())?;
+    
+    // Clean up empty households if the member moved to a different address
+    if address_id != old_address_id {
+        let _ = db.cleanup_empty_households().await;
+    }
+    
+    Ok(updated_member)
 }
 
 #[tauri::command]
