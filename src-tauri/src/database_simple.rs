@@ -984,6 +984,49 @@ impl Database {
         Ok(row.get("osoite_id"))
     }
 
+    pub async fn get_household_address_id(&self, household_id: i64) -> Result<i64> {
+        let row = sqlx::query("SELECT id FROM addresses WHERE talous_id = ?")
+            .bind(household_id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.get("id"))
+    }
+
+    pub async fn cleanup_empty_households(&self) -> Result<()> {
+        let mut transaction = self.pool.begin().await?;
+        
+        // Find households with no members
+        let empty_households = sqlx::query(
+            "SELECT DISTINCT h.id as household_id, a.id as address_id 
+             FROM households h 
+             LEFT JOIN addresses a ON a.talous_id = h.id 
+             LEFT JOIN members m ON m.osoite_id = a.id 
+             WHERE m.id IS NULL AND a.id IS NOT NULL"
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+
+        for row in empty_households {
+            let household_id: i64 = row.get("household_id");
+            let address_id: i64 = row.get("address_id");
+            
+            // Delete the address first (due to foreign key constraints)
+            sqlx::query("DELETE FROM addresses WHERE id = ?")
+                .bind(address_id)
+                .execute(&mut *transaction)
+                .await?;
+            
+            // Delete the household
+            sqlx::query("DELETE FROM households WHERE id = ?")
+                .bind(household_id)
+                .execute(&mut *transaction)
+                .await?;
+        }
+        
+        transaction.commit().await?;
+        Ok(())
+    }
+
     pub async fn update_household(
         &self,
         id: i64,
