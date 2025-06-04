@@ -40,6 +40,7 @@
             <option value="Varsinainen">Varsinainen</option>
             <option value="Kannatus">Kannatus</option>
             <option value="Kunnia">Kunnia</option>
+            <option value="Nuorisojasen">Nuorisojasen</option>
           </select>
         </div>
         <div>
@@ -237,6 +238,7 @@
                   <option value="Varsinainen">Varsinainen</option>
                   <option value="Kannatus">Kannatus</option>
                   <option value="Kunnia">Kunnia</option>
+                  <option value="Nuorisojasen">Nuorisojasen</option>
                 </select>
               </div>
               <div>
@@ -475,6 +477,8 @@ const getMemberTypeClass = (type: string) => {
       return 'bg-green-100 text-green-800'
     case 'kunnia':
       return 'bg-purple-100 text-purple-800'
+    case 'nuorisojasen':
+      return 'bg-yellow-100 text-yellow-800'
     default:
       return 'bg-gray-100 text-gray-800'
   }
@@ -488,6 +492,8 @@ const getMemberTypeLabel = (type: string) => {
       return 'Kannatus'
     case 'kunnia':
       return 'Kunnia'
+    case 'nuorisojasen':
+      return 'Nuorisojasen'
     default:
       return type
   }
@@ -524,6 +530,7 @@ const editMember = (member: Member) => {
   if (jasentyyppi === 'varsinainen') jasentyyppi = 'Varsinainen'
   if (jasentyyppi === 'kannatus') jasentyyppi = 'Kannatus'  
   if (jasentyyppi === 'kunnia') jasentyyppi = 'Kunnia'
+  if (jasentyyppi === 'nuorisojasen') jasentyyppi = 'Nuorisojasen'
   
   // Determine address type based on household data
   let osoitetyyppi = 'oma'
@@ -630,24 +637,10 @@ const saveMember = async () => {
     }
     
     if (editingMember.value) {
-      // For now, just update member basic info using the simple update_member command
-      const memberData = {
-        etunimi: memberForm.value.etunimi,
-        sukunimi: memberForm.value.sukunimi,
-        henkilotunnus: null,
-        syntymaaika: memberForm.value.syntymaaika ? memberForm.value.syntymaaika.toISOString().split('T')[0] : null,
-        puhelinnumero: memberForm.value.puhelinnumero || null,
-        sahkoposti: memberForm.value.sahkoposti || null,
-        osoite_id: 1, // Keep existing address for now
-        liittymispaiva: memberForm.value.liittymispaiva.toISOString().split('T')[0],
-        jasentyyppi: memberForm.value.jasentyyppi,
-        aktiivinen: memberForm.value.aktiivinen
-      }
-      
-      console.log('Calling update_member with id:', editingMember.value.id, 'member:', memberData)
-      await invoke('update_member', { 
+      console.log('Calling update_member_with_address with id:', editingMember.value.id, 'memberData:', memberDataForBackend)
+      await invoke('update_member_with_address', { 
         id: editingMember.value.id, 
-        member: memberData 
+        memberData: memberDataForBackend 
       })
     } else {
       console.log('Calling create_member_with_address with member data:', memberDataForBackend)

@@ -3,6 +3,22 @@ use anyhow::Result;
 use sqlx::{migrate::MigrateDatabase, Pool, Row, Sqlite};
 use std::path::PathBuf;
 
+// Suomalaisen viitenumeron tarkistussumman laskenta
+fn calculate_finnish_check_digit(reference: &str) -> u8 {
+    let weights = [7, 3, 1];
+    let mut sum = 0;
+    
+    for (i, c) in reference.chars().rev().enumerate() {
+        if let Some(digit) = c.to_digit(10) {
+            let weight = weights[i % 3];
+            sum += digit * weight;
+        }
+    }
+    
+    let check_digit = (10 - (sum % 10)) % 10;
+    check_digit as u8
+}
+
 pub struct Database {
     pool: Pool<Sqlite>,
 }
@@ -44,11 +60,35 @@ impl Database {
             .await
             .ok(); // Ignore errors if columns already exist
 
+        // Run third migration
+        sqlx::query(include_str!("../migrations/003_add_youth_member_age_limit.sql"))
+            .execute(&pool)
+            .await
+            .ok(); // Ignore errors if column already exists
+
+        // Run fourth migration
+        sqlx::query(include_str!("../migrations/004_update_member_type_constraints.sql"))
+            .execute(&pool)
+            .await
+            .ok(); // Ignore errors if constraints already updated
+
         Ok(Database { pool })
     }
 
     pub async fn close(&self) {
         self.pool.close().await;
+    }
+
+    /// Get the current database file path (for debugging)
+    pub fn get_current_database_path() -> Result<PathBuf> {
+        if cfg!(debug_assertions) {
+            Ok(PathBuf::from("dev-database.db"))
+        } else {
+            let app_data_dir = dirs::data_dir()
+                .map(|dir| dir.join("laskutin"))
+                .unwrap_or_else(|| PathBuf::from("."));
+            Ok(app_data_dir.join("laskutin.db"))
+        }
     }
 
     pub async fn get_organization(&self) -> Result<Option<Organization>> {
@@ -68,6 +108,7 @@ impl Database {
                 y_tunnus: row.get("y_tunnus"),
                 pankkitili: row.get("pankkitili"),
                 bic: row.get("bic"),
+                nuorisojasen_ikaraja: row.get("nuorisojasen_ikaraja"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
             }))
@@ -221,7 +262,7 @@ impl Database {
                 "UPDATE organization SET 
                  nimi = ?, katuosoite = ?, postinumero = ?, postitoimipaikka = ?,
                  puhelinnumero = ?, sahkoposti = ?, y_tunnus = ?, pankkitili = ?, bic = ?,
-                 updated_at = CURRENT_TIMESTAMP
+                 nuorisojasen_ikaraja = ?, updated_at = CURRENT_TIMESTAMP
                  WHERE id = (SELECT id FROM organization LIMIT 1)",
                 org.nimi,
                 org.katuosoite,
@@ -231,15 +272,16 @@ impl Database {
                 org.sahkoposti,
                 org.y_tunnus,
                 org.pankkitili,
-                org.bic
+                org.bic,
+                org.nuorisojasen_ikaraja
             )
             .execute(&self.pool)
             .await?;
         } else {
             // Insert new organization
             sqlx::query!(
-                "INSERT INTO organization (nimi, katuosoite, postinumero, postitoimipaikka, puhelinnumero, sahkoposti, y_tunnus, pankkitili, bic)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO organization (nimi, katuosoite, postinumero, postitoimipaikka, puhelinnumero, sahkoposti, y_tunnus, pankkitili, bic, nuorisojasen_ikaraja)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 org.nimi,
                 org.katuosoite,
                 org.postinumero,
@@ -248,7 +290,8 @@ impl Database {
                 org.sahkoposti,
                 org.y_tunnus,
                 org.pankkitili,
-                org.bic
+                org.bic,
+                org.nuorisojasen_ikaraja
             )
             .execute(&self.pool)
             .await?;
@@ -776,14 +819,41 @@ impl Database {
         Ok(message)
     }
 
+    pub async fn update_member_types_by_age(&self, year: i32) -> Result<u32> {
+        // Hae yhdistyksen nuorisojäsenen ikäraja
+        let org = self.get_organization().await?;
+        if org.is_none() {
+            return Ok(0);
+        }
+        let age_limit = org.unwrap().nuorisojasen_ikaraja;
+        
+        // Päivitä nuorisojäsenet varsinaisiksi jäseniksi jos ikä on ikärajan yli tai yhtä suuri
+        let updated_count = sqlx::query(
+            "UPDATE members 
+             SET jasentyyppi = 'varsinainen', updated_at = CURRENT_TIMESTAMP
+             WHERE jasentyyppi = 'nuorisojasen' 
+             AND aktiivinen = 1
+             AND syntymaaika IS NOT NULL
+             AND (? - strftime('%Y', syntymaaika)) >= ?",
+        )
+        .bind(year)
+        .bind(age_limit)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        Ok(updated_count as u32)
+    }
+
     pub async fn create_invoice_for_year(&self, year: i32) -> Result<Vec<Invoice>> {
+        // Aja jäsentyyppien päivitys ensin
+        let _ = self.update_member_types_by_age(year).await?;
         // Hae vain ne taloudet joilla ei ole vielä laskua tälle vuodelle
         let households = sqlx::query(
             "SELECT DISTINCT h.id as household_id, h.talouden_nimi, h.vastaanottaja
              FROM households h
              JOIN addresses a ON h.id = a.talous_id
              JOIN members m ON m.osoite_id = a.id
-             JOIN membership_fees mf ON m.jasentyyppi = mf.jasentyyppi AND mf.vuosi = ?
              WHERE m.aktiivinen = 1
              AND NOT EXISTS (
                  SELECT 1 FROM invoices i 
@@ -791,7 +861,6 @@ impl Database {
                  AND strftime('%Y', i.luontipaiva) = CAST(? as TEXT)
              )",
         )
-        .bind(year)
         .bind(year)
         .fetch_all(&self.pool)
         .await?;
@@ -805,11 +874,11 @@ impl Database {
 
             // Hae jäsenmaksut tälle vuodelle
             let members = sqlx::query(
-                "SELECT m.id, m.etunimi, m.sukunimi, m.jasentyyppi, mf.summa
+                "SELECT m.id, m.etunimi, m.sukunimi, m.jasentyyppi, COALESCE(mf.summa, 0.0) as summa
                  FROM members m
                  JOIN addresses a ON m.osoite_id = a.id
                  JOIN households h ON a.talous_id = h.id
-                 JOIN membership_fees mf ON m.jasentyyppi = mf.jasentyyppi AND mf.vuosi = ?
+                 LEFT JOIN membership_fees mf ON m.jasentyyppi = mf.jasentyyppi AND mf.vuosi = ?
                  WHERE h.id = ? AND m.aktiivinen = 1",
             )
             .bind(year)
@@ -833,8 +902,10 @@ impl Database {
                 continue; // Ei laskutettavaa
             }
 
-            // Generoi viitenumero
-            let reference_number = format!("{}{:05}", year, household_id);
+            // Generoi viitenumero suomalaisella tarkistussummalla
+            let base_reference = format!("{}{:05}", year, household_id);
+            let check_digit = calculate_finnish_check_digit(&base_reference);
+            let reference_number = format!("{}{}", base_reference, check_digit);
             let invoice_number = format!("{}-{:03}", year, household_id);
 
             // Luo lasku

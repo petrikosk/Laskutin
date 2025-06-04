@@ -22,6 +22,12 @@ sqlite3 "$DB_FILE" < src-tauri/migrations/001_initial.sql
 # Apply second migration  
 sqlite3 "$DB_FILE" < src-tauri/migrations/002_add_fields.sql
 
+# Apply third migration
+sqlite3 "$DB_FILE" < src-tauri/migrations/003_add_youth_member_age_limit.sql
+
+# Apply fourth migration
+sqlite3 "$DB_FILE" < src-tauri/migrations/004_update_member_type_constraints.sql
+
 echo "Development database created successfully!"
 echo "Location: $(pwd)/$DB_FILE"
 

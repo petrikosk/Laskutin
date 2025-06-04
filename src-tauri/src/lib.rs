@@ -19,6 +19,7 @@ pub fn run() {
             .plugin(tauri_plugin_dialog::init())
             .manage(db_state)
             .invoke_handler(tauri::generate_handler![
+                commands::get_database_info,
                 commands::get_organization,
                 commands::update_organization,
                 commands::get_members,

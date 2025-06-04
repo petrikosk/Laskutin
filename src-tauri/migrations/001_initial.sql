@@ -104,23 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_invoice_lines_lasku ON invoice_lines(lasku_id);
 CREATE INDEX IF NOT EXISTS idx_invoice_lines_jasen ON invoice_lines(jasen_id);
 CREATE INDEX IF NOT EXISTS idx_membership_fees_vuosi_tyyppi ON membership_fees(vuosi, jasentyyppi);
 
--- Esimerkkidata (vain jos taulut ovat tyhjiä)
-INSERT OR IGNORE INTO organization (nimi, katuosoite, postinumero, postitoimipaikka, puhelinnumero, sahkoposti, y_tunnus, pankkitili, bic) VALUES
-('Esimerkkiyhdistys ry', 'Yhdistyskatu 1', '00100', 'Helsinki', '09-12345678', 'yhdistys@example.fi', '1234567-8', 'FI12 3456 7890 1234 56', 'OKOYFIHH');
-
-INSERT OR IGNORE INTO households (id, talouden_nimi, laskutusosoite_sama) VALUES 
-(1, 'Korhosen perhe', 1),
-(2, NULL, 1);
-
-INSERT OR IGNORE INTO addresses (id, katuosoite, postinumero, postitoimipaikka, talous_id) VALUES
-(1, 'Kotikatu 1', '00100', 'Helsinki', 1),
-(2, 'Testikatu 2', '00200', 'Espoo', 2);
-
-INSERT OR IGNORE INTO members (etunimi, sukunimi, henkilotunnus, puhelinnumero, sahkoposti, osoite_id, liittymispaiva, jasentyyppi) VALUES
-('Matti', 'Korhonen', '010180-123A', '040-1234567', 'matti@example.com', 1, '2023-01-15', 'varsinainen'),
-('Maija', 'Korhonen', '020190-456B', '040-7654321', 'maija@example.com', 1, '2023-01-15', 'varsinainen'),
-('Testi', 'Henkilö', '030185-789C', '050-1112223', 'testi@example.com', 2, '2023-03-10', 'kannatus');
-
+-- Jäsenmaksut perusdata (pakolliset maksutyypit)
 INSERT OR IGNORE INTO membership_fees (vuosi, jasentyyppi, summa) VALUES
 (2024, 'varsinainen', 50.00),
 (2024, 'kannatus', 25.00),

@@ -14,6 +14,7 @@ pub struct Organization {
     pub y_tunnus: Option<String>,
     pub pankkitili: Option<String>,
     pub bic: Option<String>,
+    pub nuorisojasen_ikaraja: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -29,6 +30,7 @@ pub struct CreateOrganization {
     pub y_tunnus: Option<String>,
     pub pankkitili: Option<String>,
     pub bic: Option<String>,
+    pub nuorisojasen_ikaraja: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -72,6 +74,7 @@ pub struct CreateAddress {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MemberType {
     Varsinainen,
+    Nuorisojasen,
     Kannatus,
     Kunnia,
 }
@@ -80,6 +83,7 @@ impl ToString for MemberType {
     fn to_string(&self) -> String {
         match self {
             MemberType::Varsinainen => "varsinainen".to_string(),
+            MemberType::Nuorisojasen => "nuorisojasen".to_string(),
             MemberType::Kannatus => "kannatus".to_string(),
             MemberType::Kunnia => "kunnia".to_string(),
         }
@@ -92,6 +96,7 @@ impl std::str::FromStr for MemberType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "varsinainen" | "Varsinainen" => Ok(MemberType::Varsinainen),
+            "nuorisojasen" | "Nuorisojasen" => Ok(MemberType::Nuorisojasen),
             "kannatus" | "Kannatus" => Ok(MemberType::Kannatus),
             "kunnia" | "Kunnia" => Ok(MemberType::Kunnia),
             _ => Err(format!("Invalid member type: {}", s)),

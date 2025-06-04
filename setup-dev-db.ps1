@@ -30,6 +30,12 @@ try {
     # Apply second migration  
     Get-Content "src-tauri/migrations/002_add_fields.sql" | sqlite3 $DB_FILE
     
+    # Apply third migration
+    Get-Content "src-tauri/migrations/003_add_youth_member_age_limit.sql" | sqlite3 $DB_FILE
+    
+    # Apply fourth migration
+    Get-Content "src-tauri/migrations/004_update_member_type_constraints.sql" | sqlite3 $DB_FILE
+    
     Write-Host "Development database created successfully!" -ForegroundColor Green
     Write-Host "Location: $(Get-Location)\$DB_FILE" -ForegroundColor Cyan
     

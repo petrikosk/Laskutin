@@ -8,6 +8,14 @@ use chrono::Datelike;
 type DbState = Arc<Mutex<Database>>;
 
 #[tauri::command]
+pub async fn get_database_info() -> Result<String, String> {
+    let db_path = Database::get_current_database_path()
+        .map_err(|e| e.to_string())?;
+    let mode = if cfg!(debug_assertions) { "Development" } else { "Production" };
+    Ok(format!("Mode: {}, Database: {}", mode, db_path.to_string_lossy()))
+}
+
+#[tauri::command]
 pub async fn get_organization(db: State<'_, DbState>) -> Result<Option<Organization>, String> {
     let db = db.lock().await;
     db.get_organization().await.map_err(|e| e.to_string())
@@ -135,7 +143,8 @@ pub async fn update_member(
 pub async fn update_member_with_address(
     db: State<'_, DbState>,
     id: i64,
-    member_data: serde_json::Value,
+    #[allow(non_snake_case)]
+    memberData: serde_json::Value,
 ) -> Result<Member, String> {
     let db = db.lock().await;
     
@@ -143,12 +152,12 @@ pub async fn update_member_with_address(
     let old_address_id = db.get_member_address_id(id).await.map_err(|e| e.to_string())?;
     
     // Extract data from the frontend payload
-    let osoitetyyppi = member_data["osoitetyyppi"].as_str().unwrap_or("keep");
+    let osoitetyyppi = memberData["osoitetyyppi"].as_str().unwrap_or("keep");
     
     let address_id = match osoitetyyppi {
         "talous" => {
             // Join existing household - get address_id from the selected household
-            let talous_id = member_data["talous_id"].as_i64()
+            let talous_id = memberData["talous_id"].as_i64()
                 .ok_or("talous_id is required when joining existing household")?;
             
             // Get the address_id from the selected household
@@ -157,11 +166,11 @@ pub async fn update_member_with_address(
         "oma" | "uusi" => {
             // Create new household and address
             let household_name = if osoitetyyppi == "uusi" {
-                member_data["talouden_nimi"].as_str().map(|s| s.to_string())
+                memberData["talouden_nimi"].as_str().map(|s| s.to_string())
             } else {
                 Some(format!("{} {}", 
-                    member_data["etunimi"].as_str().unwrap_or(""),
-                    member_data["sukunimi"].as_str().unwrap_or("")))
+                    memberData["etunimi"].as_str().unwrap_or(""),
+                    memberData["sukunimi"].as_str().unwrap_or("")))
             };
             
             let household = CreateHousehold {
@@ -175,9 +184,9 @@ pub async fn update_member_with_address(
                 .map_err(|e| e.to_string())?;
             
             let address = CreateAddress {
-                katuosoite: member_data["katuosoite"].as_str().unwrap_or("").to_string(),
-                postinumero: member_data["postinumero"].as_str().unwrap_or("").to_string(),
-                postitoimipaikka: member_data["postitoimipaikka"].as_str().unwrap_or("").to_string(),
+                katuosoite: memberData["katuosoite"].as_str().unwrap_or("").to_string(),
+                postinumero: memberData["postinumero"].as_str().unwrap_or("").to_string(),
+                postitoimipaikka: memberData["postitoimipaikka"].as_str().unwrap_or("").to_string(),
                 talous_id: created_household.id,
             };
             
@@ -189,9 +198,9 @@ pub async fn update_member_with_address(
         _ => {
             // Keep existing address but update it if address data is provided
             if let (Some(katuosoite), Some(postinumero), Some(postitoimipaikka)) = (
-                member_data["katuosoite"].as_str(),
-                member_data["postinumero"].as_str(), 
-                member_data["postitoimipaikka"].as_str()
+                memberData["katuosoite"].as_str(),
+                memberData["postinumero"].as_str(), 
+                memberData["postitoimipaikka"].as_str()
             ) {
                 db.update_address(old_address_id, katuosoite, postinumero, postitoimipaikka)
                     .await
@@ -202,29 +211,29 @@ pub async fn update_member_with_address(
     };
     
     // Parse member type
-    let member_type_str = member_data["jasentyyppi"].as_str().unwrap_or("Varsinainen");
+    let member_type_str = memberData["jasentyyppi"].as_str().unwrap_or("Varsinainen");
     let member_type: MemberType = member_type_str.parse()
         .map_err(|e: String| format!("Invalid member type: {}", e))?;
     
     // Parse dates
-    let syntymaaika = member_data["syntymaaika"].as_str()
+    let syntymaaika = memberData["syntymaaika"].as_str()
         .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
     
-    let liittymispaiva = member_data["liittymispaiva"].as_str()
+    let liittymispaiva = memberData["liittymispaiva"].as_str()
         .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
         .unwrap_or_else(|| chrono::Utc::now().date_naive());
     
     let member = CreateMember {
-        etunimi: member_data["etunimi"].as_str().unwrap_or("").to_string(),
-        sukunimi: member_data["sukunimi"].as_str().unwrap_or("").to_string(),
-        henkilotunnus: member_data["henkilotunnus"].as_str().map(|s| s.to_string()),
+        etunimi: memberData["etunimi"].as_str().unwrap_or("").to_string(),
+        sukunimi: memberData["sukunimi"].as_str().unwrap_or("").to_string(),
+        henkilotunnus: memberData["henkilotunnus"].as_str().map(|s| s.to_string()),
         syntymaaika,
-        puhelinnumero: member_data["puhelinnumero"].as_str().map(|s| s.to_string()),
-        sahkoposti: member_data["sahkoposti"].as_str().map(|s| s.to_string()),
+        puhelinnumero: memberData["puhelinnumero"].as_str().map(|s| s.to_string()),
+        sahkoposti: memberData["sahkoposti"].as_str().map(|s| s.to_string()),
         osoite_id: address_id,
         liittymispaiva,
         jasentyyppi: member_type,
-        aktiivinen: member_data["aktiivinen"].as_bool().unwrap_or(true),
+        aktiivinen: memberData["aktiivinen"].as_bool().unwrap_or(true),
     };
     
     let updated_member = db.update_member(id, &member).await.map_err(|e| e.to_string())?;

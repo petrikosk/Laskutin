@@ -456,13 +456,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import InvoicePDF from './InvoicePDF.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import DateInput from './DateInput.vue'
 import PaymentDialog from './PaymentDialog.vue'
 import SuccessNotification from './SuccessNotification.vue'
 import AlertDialog from './AlertDialog.vue'
-import { generateAndSavePDF, printInvoice as printInvoiceUtil } from '../utils/pdfGenerator'
+import { generateVectorInvoicePDF } from '../utils/vectorPdfGenerator'
 import { formatDate } from '../utils/dateUtils'
 
 interface Invoice {
@@ -489,7 +488,6 @@ const filterStatus = ref('')
 const showCreateModal = ref(false)
 const selectedInvoice = ref<Invoice | null>(null)
 const showPrintModal = ref(false)
-const pdfComponentRef = ref<InstanceType<typeof InvoicePDF> | null>(null)
 const organization = ref<any>(null)
 const showPaymentDialog = ref(false)
 const selectedInvoiceForPayment = ref<Invoice | null>(null)
@@ -689,9 +687,16 @@ const printInvoice = async (invoice: Invoice) => {
 
 const handlePrint = async () => {
   try {
-    if (!selectedInvoice.value || !pdfComponentRef.value?.invoiceRef) return
+    if (!selectedInvoice.value) return
     
-    await printInvoiceUtil(pdfComponentRef.value.invoiceRef)
+    const defaultFilename = `lasku_${selectedInvoice.value.viitenumero}.pdf`
+    
+    // Use vector PDF generation for printing too
+    await generateVectorInvoicePDF({
+      invoice: selectedInvoice.value,
+      organization: organization.value
+    }, defaultFilename)
+    
     showPrintModal.value = false
     selectedInvoice.value = null
   } catch (error: unknown) {
@@ -703,11 +708,15 @@ const handlePrint = async () => {
 
 const handleDownloadPDF = async () => {
   try {
-    if (!selectedInvoice.value || !pdfComponentRef.value?.invoiceRef) return
+    if (!selectedInvoice.value) return
     
     const defaultFilename = `lasku_${selectedInvoice.value.viitenumero}.pdf`
     
-    await generateAndSavePDF(pdfComponentRef.value.invoiceRef, defaultFilename)
+    // Use vector PDF generation instead of bitmap
+    await generateVectorInvoicePDF({
+      invoice: selectedInvoice.value,
+      organization: organization.value
+    }, defaultFilename)
     
     showPrintModal.value = false
     selectedInvoice.value = null

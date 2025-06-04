@@ -136,6 +136,20 @@
                 class="form-input"
               />
             </div>
+            
+            <div>
+              <label class="form-label">
+                Nuorisojäsenen ikäraja (vuotta)
+              </label>
+              <input
+                v-model.number="organizationForm.nuorisojasen_ikaraja"
+                type="number"
+                min="1"
+                max="99"
+                class="form-input"
+                placeholder="18"
+              />
+            </div>
           </div>
           
           <div class="pt-6 border-t border-gray-200">
@@ -255,6 +269,7 @@ interface Organization {
   y_tunnus: string
   pankkitili: string
   bic: string
+  nuorisojasen_ikaraja: number
 }
 
 const organizationForm = ref<Organization>({
@@ -267,6 +282,7 @@ const organizationForm = ref<Organization>({
   y_tunnus: '',
   pankkitili: '',
   bic: '',
+  nuorisojasen_ikaraja: 18,
 })
 
 const saving = ref(false)
@@ -332,6 +348,7 @@ const loadOrganization = async () => {
         y_tunnus: (organization as any).y_tunnus || '',
         pankkitili: (organization as any).pankkitili || '',
         bic: (organization as any).bic || '',
+        nuorisojasen_ikaraja: (organization as any).nuorisojasen_ikaraja || 18,
       }
     } else {
       // Aseta oletusarvot jos yhdistystä ei löydy
@@ -345,6 +362,7 @@ const loadOrganization = async () => {
         y_tunnus: '1234567-8',
         pankkitili: 'FI12 3456 7890 1234 56',
         bic: 'OKOYFIHH',
+        nuorisojasen_ikaraja: 18,
       }
     }
   } catch (error) {
