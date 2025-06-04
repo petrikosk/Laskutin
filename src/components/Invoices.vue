@@ -263,15 +263,6 @@
       </div>
     </div>
 
-    <!-- PDF-komponentti (piilotettu) -->
-    <div v-if="showPrintModal" style="position: absolute; left: -9999px; top: -9999px;">
-      <InvoicePDF 
-        v-if="selectedInvoice && organization"
-        ref="pdfComponentRef"
-        :invoice="selectedInvoice"
-        :organization="organization"
-      />
-    </div>
 
     <!-- Varmistusdialogie -->
     <ConfirmDialog
@@ -461,7 +452,7 @@ import DateInput from './DateInput.vue'
 import PaymentDialog from './PaymentDialog.vue'
 import SuccessNotification from './SuccessNotification.vue'
 import AlertDialog from './AlertDialog.vue'
-import { generateVectorInvoicePDF } from '../utils/vectorPdfGenerator'
+import { generateVectorInvoicePDF, generatePrintablePDF } from '../utils/vectorPdfGenerator'
 import { formatDate } from '../utils/dateUtils'
 
 interface Invoice {
@@ -689,13 +680,24 @@ const handlePrint = async () => {
   try {
     if (!selectedInvoice.value) return
     
-    const defaultFilename = `lasku_${selectedInvoice.value.viitenumero}.pdf`
-    
-    // Use vector PDF generation for printing too
-    await generateVectorInvoicePDF({
+    // Generate PDF data without saving to file
+    const pdfData = await generatePrintablePDF({
       invoice: selectedInvoice.value,
       organization: organization.value
-    }, defaultFilename)
+    })
+    
+    // Create blob URL and open print dialog
+    const blob = new Blob([pdfData], { type: 'application/pdf' })
+    const url = URL.createObjectURL(blob)
+    
+    // Open in new window for printing
+    const printWindow = window.open(url, '_blank')
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print()
+        URL.revokeObjectURL(url)
+      }
+    }
     
     showPrintModal.value = false
     selectedInvoice.value = null
