@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rg:*)",
+      "Bash(sqlite3:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(cargo check:*)",
+      "Bash(rm:*)"
+    ],
+    "deny": []
+  }
+}

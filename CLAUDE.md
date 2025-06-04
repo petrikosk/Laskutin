@@ -134,7 +134,8 @@ cd src-tauri && cargo build
   - **'uusi'**: Create new household that others can join
 - Automatic cleanup when households become empty
 - Finnish date picker with proper DD.MM.YYYY formatting
-- Member type validation (Varsinainen/Kannatus/Kunnia)
+- Member type validation (Varsinainen/Nuorisojasen/Kannatus/Kunnia)
+- Automatic age-based member type conversion from Nuorisojasen to Varsinainen
 
 ### Laskutus
 - Automatic invoice generation per household
@@ -180,6 +181,12 @@ Frontend: camelCase ↔ Backend: snake_case
 - Node.js 20.x
 - Rust stable
 - Custom CSS (Tailwind removed due to ES module conflicts)
+
+## Tietokantapolut
+- **Kehitys (debug)**: `dev-database.db` (paikallinen)
+- **Tuotanto (release)**: `~/.local/share/laskutin/laskutin.db` (Linux/WSL)
+- Automaattinen valinta build-moden perusteella
+- `get_database_info` komento näyttää käytössä olevan tietokannan
 
 ## Seuraavat kehityskohteet
 - Implement proper `create_membership_fee` and `update_membership_fee`

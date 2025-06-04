@@ -39,6 +39,7 @@
           >
             <option value="">Kaikki tyypit</option>
             <option value="varsinainen">Varsinainen</option>
+            <option value="nuorisojasen">Nuorisojasen</option>
             <option value="kannatus">Kannatus</option>
             <option value="kunnia">Kunnia</option>
           </select>
@@ -149,6 +150,7 @@
                   :class="{'opacity-50': !!editingFee}"
                 >
                   <option value="varsinainen">Varsinainen</option>
+                  <option value="nuorisojasen">Nuorisojasen</option>
                   <option value="kannatus">Kannatus</option>
                   <option value="kunnia">Kunnia</option>
                 </select>
@@ -294,6 +296,8 @@ const getMemberTypeClass = (type: string) => {
   switch (type) {
     case 'varsinainen':
       return 'bg-blue-100 text-blue-800'
+    case 'nuorisojasen':
+      return 'bg-yellow-100 text-yellow-800'
     case 'kannatus':
       return 'bg-green-100 text-green-800'
     case 'kunnia':
@@ -307,6 +311,8 @@ const getMemberTypeLabel = (type: string) => {
   switch (type) {
     case 'varsinainen':
       return 'Varsinainen'
+    case 'nuorisojasen':
+      return 'Nuorisojasen'
     case 'kannatus':
       return 'Kannatus'
     case 'kunnia':
