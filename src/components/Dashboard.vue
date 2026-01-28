@@ -163,44 +163,67 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.stat-card {
-  @apply bg-white p-6 rounded-lg shadow-md border border-gray-200;
-}
-
 .action-cards-container {
-  @apply bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden;
+  background-color: #ffffff;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
 }
 
 .action-cards-content {
-  @apply p-6;
+  padding: 1.5rem;
 }
 
 .action-cards-title {
-  @apply text-lg font-bold text-gray-900 mb-6;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 1.5rem;
 }
 
 .action-cards-grid {
-  @apply grid gap-4;
+  display: grid;
+  gap: 1rem;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 
 .action-card {
-  @apply p-6 bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200 rounded-2xl flex items-center gap-4 no-underline text-inherit transition-all duration-200 shadow-md hover:shadow-lg hover:border-gray-300 hover:-translate-y-1;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  border: 2px solid #e5e7eb;
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.action-card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  border-color: #d1d5db;
+  transform: translateY(-2px);
 }
 
 .action-card-icon {
-  @apply flex-shrink-0;
+  flex-shrink: 0;
 }
 
 .action-card-text {
-  @apply flex-1;
+  flex: 1;
 }
 
 .action-card-title {
-  @apply font-semibold text-gray-900 mb-1;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.25rem;
 }
 
 .action-card-description {
-  @apply text-sm text-gray-600;
+  font-size: 0.875rem;
+  color: #4b5563;
 }
 </style>
