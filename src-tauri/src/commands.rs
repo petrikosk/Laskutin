@@ -60,8 +60,12 @@ pub async fn create_member_with_address(
     
     let address_id = match osoitetyyppi {
         "talous" => {
-            // Join existing household
-            memberData["talous_id"].as_i64().unwrap_or(1)
+            // Join existing household - get address_id from the selected household
+            let talous_id = memberData["talous_id"].as_i64()
+                .ok_or("talous_id is required when joining existing household")?;
+
+            // Get the address_id from the selected household
+            db.get_household_address_id(talous_id).await.map_err(|e| e.to_string())?
         },
         "oma" | "uusi" => {
             // Create new household and address

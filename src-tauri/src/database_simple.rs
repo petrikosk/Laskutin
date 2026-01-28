@@ -48,29 +48,50 @@ impl Database {
             .connect(&db_url)
             .await?;
 
-        // Run migrations manually
-        sqlx::query(include_str!("../migrations/001_initial.sql"))
+        // Run migrations manually - log errors but continue if table/column already exists
+        if let Err(e) = sqlx::query(include_str!("../migrations/001_initial.sql"))
             .execute(&pool)
             .await
-            .ok(); // Ignore errors if tables already exist
+        {
+            // Only log if it's not a "table already exists" error
+            let err_str = e.to_string();
+            if !err_str.contains("already exists") {
+                eprintln!("Migration 001 warning: {}", err_str);
+            }
+        }
 
         // Run second migration
-        sqlx::query(include_str!("../migrations/002_add_fields.sql"))
+        if let Err(e) = sqlx::query(include_str!("../migrations/002_add_fields.sql"))
             .execute(&pool)
             .await
-            .ok(); // Ignore errors if columns already exist
+        {
+            let err_str = e.to_string();
+            if !err_str.contains("duplicate column") && !err_str.contains("already exists") {
+                eprintln!("Migration 002 warning: {}", err_str);
+            }
+        }
 
         // Run third migration
-        sqlx::query(include_str!("../migrations/003_add_youth_member_age_limit.sql"))
+        if let Err(e) = sqlx::query(include_str!("../migrations/003_add_youth_member_age_limit.sql"))
             .execute(&pool)
             .await
-            .ok(); // Ignore errors if column already exists
+        {
+            let err_str = e.to_string();
+            if !err_str.contains("duplicate column") && !err_str.contains("already exists") {
+                eprintln!("Migration 003 warning: {}", err_str);
+            }
+        }
 
         // Run fourth migration
-        sqlx::query(include_str!("../migrations/004_update_member_type_constraints.sql"))
+        if let Err(e) = sqlx::query(include_str!("../migrations/004_update_member_type_constraints.sql"))
             .execute(&pool)
             .await
-            .ok(); // Ignore errors if constraints already updated
+        {
+            let err_str = e.to_string();
+            if !err_str.contains("already exists") {
+                eprintln!("Migration 004 warning: {}", err_str);
+            }
+        }
 
         Ok(Database { pool })
     }
@@ -447,10 +468,10 @@ impl Database {
 
     pub async fn get_households_with_addresses(&self) -> Result<Vec<(Household, Address)>> {
         let rows = sqlx::query(
-            "SELECT 
-                h.id, h.talouden_nimi, h.laskutusosoite_sama, h.laskutusosoite_id,
+            "SELECT
+                h.id, h.talouden_nimi, h.vastaanottaja, h.laskutusosoite_sama, h.laskutusosoite_id,
                 h.created_at, h.updated_at,
-                a.katuosoite, a.postinumero, a.postitoimipaikka, a.talous_id,
+                a.id as address_id, a.katuosoite, a.postinumero, a.postitoimipaikka, a.talous_id,
                 a.created_at as address_created_at, a.updated_at as address_updated_at
              FROM households h
              JOIN addresses a ON h.id = a.talous_id
@@ -464,7 +485,7 @@ impl Database {
             let household = Household {
                 id: row.get("id"),
                 talouden_nimi: row.get("talouden_nimi"),
-                vastaanottaja: row.try_get("vastaanottaja").ok(),
+                vastaanottaja: row.try_get("vastaanottaja").ok().flatten(),
                 laskutusosoite_sama: row.get("laskutusosoite_sama"),
                 laskutusosoite_id: row.get("laskutusosoite_id"),
                 created_at: row.get("created_at"),
@@ -472,7 +493,7 @@ impl Database {
             };
 
             let address = Address {
-                id: row.get("talous_id"), // This should be address id, but we'll use talous_id for now
+                id: row.get("address_id"),
                 katuosoite: row.get("katuosoite"),
                 postinumero: row.get("postinumero"),
                 postitoimipaikka: row.get("postitoimipaikka"),
