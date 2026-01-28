@@ -413,13 +413,28 @@ interface Member {
   postitoimipaikka?: string
 }
 
-// Helper function for date formatting
+// Helper function for date formatting (display)
 const formatDate = (dateInput: string | Date) => {
+  if (typeof dateInput === 'string') {
+    // If it's already a YYYY-MM-DD string, parse it directly
+    const parts = dateInput.split('-')
+    if (parts.length === 3) {
+      return `${parts[2]}.${parts[1]}.${parts[0]}`
+    }
+  }
   const date = dateInput instanceof Date ? dateInput : new Date(dateInput)
   const day = String(date.getDate()).padStart(2, '0')
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const year = date.getFullYear()
   return `${day}.${month}.${year}`
+}
+
+// Helper function for converting Date to YYYY-MM-DD string without timezone issues
+const dateToYYYYMMDD = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 const members = ref<Member[]>([])
@@ -628,11 +643,11 @@ const saveMember = async () => {
     console.log('invoke function:', invoke)
     console.log('typeof invoke:', typeof invoke)
     
-    // Prepare member data for backend - convert dates to strings
+    // Prepare member data for backend - convert dates to strings without timezone issues
     const memberDataForBackend = {
       ...memberForm.value,
-      syntymaaika: memberForm.value.syntymaaika ? memberForm.value.syntymaaika.toISOString().split('T')[0] : null,
-      liittymispaiva: memberForm.value.liittymispaiva.toISOString().split('T')[0],
+      syntymaaika: memberForm.value.syntymaaika ? dateToYYYYMMDD(memberForm.value.syntymaaika) : null,
+      liittymispaiva: dateToYYYYMMDD(memberForm.value.liittymispaiva),
       henkilotunnus: null, // Removed as requested
     }
     
