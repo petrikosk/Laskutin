@@ -453,7 +453,7 @@ import PaymentDialog from './PaymentDialog.vue'
 import SuccessNotification from './SuccessNotification.vue'
 import AlertDialog from './AlertDialog.vue'
 import { generateVectorInvoicePDF, generatePrintablePDF } from '../utils/vectorPdfGenerator'
-import { formatDate } from '../utils/dateUtils'
+import { formatDate, getDateInFutureYYYYMMDD } from '../utils/dateUtils'
 
 interface Invoice {
   id: number
@@ -513,7 +513,7 @@ const years = computed(() => {
 
 const invoiceForm = ref({
   year: new Date().getFullYear(),
-  dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  dueDate: getDateInFutureYYYYMMDD(30)
 })
 
 const filteredInvoices = computed(() => {
