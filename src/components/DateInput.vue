@@ -16,6 +16,7 @@
 import { ref, watch } from 'vue'
 import VueDatePicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
+import { dateToYYYYMMDD } from '../utils/dateUtils'
 
 interface Props {
   modelValue?: string | Date | null
@@ -61,10 +62,10 @@ watch(() => props.modelValue, (newValue) => {
 
 const handleDateChange = (newDate: Date | null) => {
   dateValue.value = newDate
-  // Convert Date to ISO string for backend compatibility
+  // Paikallinen päivä ilman aikavyöhykesiirtymää: toISOString() antaisi
+  // edellisen päivän Suomen aikavyöhykkeellä
   if (newDate) {
-    const isoString = newDate.toISOString().split('T')[0]
-    emit('update:modelValue', isoString)
+    emit('update:modelValue', dateToYYYYMMDD(newDate))
   } else {
     emit('update:modelValue', null)
   }
