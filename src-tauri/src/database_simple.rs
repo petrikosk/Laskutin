@@ -36,7 +36,9 @@ impl Database {
             app_data_dir.join("laskutin.db")
         };
 
-        let db_url = format!("sqlite://{}", db_path.to_string_lossy());
+        // Muoto "sqlite:polku" kauttaviivoilla: "sqlite://C:/..." tulkitsisi
+        // Windows-aseman host-osaksi ja backslashit eivät kelpaa URL:iin
+        let db_url = format!("sqlite:{}", db_path.to_string_lossy().replace('\\', "/"));
 
         // Create database if it doesn't exist
         if !db_path.exists() {
@@ -213,7 +215,7 @@ impl Database {
                 m.jasentyyppi, m.aktiivinen, m.created_at, m.updated_at,
                 a.katuosoite, a.postinumero, a.postitoimipaikka, a.talous_id,
                 a.created_at as address_created_at, a.updated_at as address_updated_at,
-                h.talouden_nimi, h.laskutusosoite_sama, h.laskutusosoite_id,
+                h.talouden_nimi, h.vastaanottaja, h.laskutusosoite_sama, h.laskutusosoite_id,
                 h.created_at as household_created_at, h.updated_at as household_updated_at
              FROM members m
              JOIN addresses a ON m.osoite_id = a.id
@@ -273,47 +275,47 @@ impl Database {
 
     pub async fn update_organization(&self, org: &CreateOrganization) -> Result<Organization> {
         // Check if organization exists
-        let existing = sqlx::query!("SELECT id FROM organization LIMIT 1")
+        let existing = sqlx::query("SELECT id FROM organization LIMIT 1")
             .fetch_optional(&self.pool)
             .await?;
 
         if existing.is_some() {
             // Update existing organization
-            sqlx::query!(
-                "UPDATE organization SET 
+            sqlx::query(
+                "UPDATE organization SET
                  nimi = ?, katuosoite = ?, postinumero = ?, postitoimipaikka = ?,
                  puhelinnumero = ?, sahkoposti = ?, y_tunnus = ?, pankkitili = ?, bic = ?,
                  nuorisojasen_ikaraja = ?, updated_at = CURRENT_TIMESTAMP
                  WHERE id = (SELECT id FROM organization LIMIT 1)",
-                org.nimi,
-                org.katuosoite,
-                org.postinumero,
-                org.postitoimipaikka,
-                org.puhelinnumero,
-                org.sahkoposti,
-                org.y_tunnus,
-                org.pankkitili,
-                org.bic,
-                org.nuorisojasen_ikaraja
             )
+            .bind(&org.nimi)
+            .bind(&org.katuosoite)
+            .bind(&org.postinumero)
+            .bind(&org.postitoimipaikka)
+            .bind(&org.puhelinnumero)
+            .bind(&org.sahkoposti)
+            .bind(&org.y_tunnus)
+            .bind(&org.pankkitili)
+            .bind(&org.bic)
+            .bind(org.nuorisojasen_ikaraja)
             .execute(&self.pool)
             .await?;
         } else {
             // Insert new organization
-            sqlx::query!(
+            sqlx::query(
                 "INSERT INTO organization (nimi, katuosoite, postinumero, postitoimipaikka, puhelinnumero, sahkoposti, y_tunnus, pankkitili, bic, nuorisojasen_ikaraja)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                org.nimi,
-                org.katuosoite,
-                org.postinumero,
-                org.postitoimipaikka,
-                org.puhelinnumero,
-                org.sahkoposti,
-                org.y_tunnus,
-                org.pankkitili,
-                org.bic,
-                org.nuorisojasen_ikaraja
             )
+            .bind(&org.nimi)
+            .bind(&org.katuosoite)
+            .bind(&org.postinumero)
+            .bind(&org.postitoimipaikka)
+            .bind(&org.puhelinnumero)
+            .bind(&org.sahkoposti)
+            .bind(&org.y_tunnus)
+            .bind(&org.pankkitili)
+            .bind(&org.bic)
+            .bind(org.nuorisojasen_ikaraja)
             .execute(&self.pool)
             .await?;
         }
@@ -424,8 +426,17 @@ impl Database {
             .await?
             .get::<i64, _>("count");
 
+            // Check that the household has no invoices before deleting it
+            let household_invoices = sqlx::query(
+                "SELECT COUNT(*) as count FROM invoices WHERE talous_id = ?",
+            )
+            .bind(household_id)
+            .fetch_one(&mut *transaction)
+            .await?
+            .get::<i64, _>("count");
+
             // If no members left in household, delete the household and its address
-            if remaining_members == 0 {
+            if remaining_members == 0 && household_invoices == 0 {
                 // Delete address first (which will cascade delete members if any remain)
                 sqlx::query("DELETE FROM addresses WHERE talous_id = ?")
                     .bind(household_id)
@@ -866,7 +877,11 @@ impl Database {
         Ok(updated_count as u32)
     }
 
-    pub async fn create_invoice_for_year(&self, year: i32) -> Result<Vec<Invoice>> {
+    pub async fn create_invoice_for_year(
+        &self,
+        year: i32,
+        due_date: Option<chrono::NaiveDate>,
+    ) -> Result<Vec<Invoice>> {
         // Aja jäsentyyppien päivitys ensin
         let _ = self.update_member_types_by_age(year).await?;
         // Hae vain ne taloudet joilla ei ole vielä laskua tälle vuodelle
@@ -888,7 +903,7 @@ impl Database {
 
         let mut created_invoices = Vec::new();
         let current_date = chrono::Utc::now().date_naive();
-        let due_date = current_date + chrono::Duration::days(30);
+        let due_date = due_date.unwrap_or_else(|| current_date + chrono::Duration::days(30));
 
         for household_row in households {
             let household_id: i64 = household_row.get("household_id");
@@ -1087,13 +1102,14 @@ impl Database {
     pub async fn cleanup_empty_households(&self) -> Result<()> {
         let mut transaction = self.pool.begin().await?;
         
-        // Find households with no members
+        // Find households with no members (and no invoices - invoices reference the household)
         let empty_households = sqlx::query(
-            "SELECT DISTINCT h.id as household_id, a.id as address_id 
-             FROM households h 
-             LEFT JOIN addresses a ON a.talous_id = h.id 
-             LEFT JOIN members m ON m.osoite_id = a.id 
-             WHERE m.id IS NULL AND a.id IS NOT NULL"
+            "SELECT DISTINCT h.id as household_id, a.id as address_id
+             FROM households h
+             LEFT JOIN addresses a ON a.talous_id = h.id
+             LEFT JOIN members m ON m.osoite_id = a.id
+             WHERE m.id IS NULL AND a.id IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.talous_id = h.id)"
         )
         .fetch_all(&mut *transaction)
         .await?;
@@ -1178,26 +1194,61 @@ impl Database {
     }
 
     pub async fn delete_household(&self, id: i64) -> Result<()> {
+        let mut transaction = self.pool.begin().await?;
+
+        // Estä poisto jos taloudella on laskuja
+        let invoice_count = sqlx::query("SELECT COUNT(*) as count FROM invoices WHERE talous_id = ?")
+            .bind(id)
+            .fetch_one(&mut *transaction)
+            .await?
+            .get::<i64, _>("count");
+
+        if invoice_count > 0 {
+            transaction.rollback().await?;
+            return Err(anyhow::anyhow!(
+                "Taloutta ei voi poistaa, koska siihen liittyy laskuja. Poista ensin talouden laskut."
+            ));
+        }
+
+        // Estä poisto jos talouden jäsenillä on laskurivejä (esim. toisen talouden laskulla)
+        let line_count = sqlx::query(
+            "SELECT COUNT(*) as count FROM invoice_lines il
+             JOIN members m ON il.jasen_id = m.id
+             WHERE m.osoite_id IN (SELECT id FROM addresses WHERE talous_id = ?)",
+        )
+        .bind(id)
+        .fetch_one(&mut *transaction)
+        .await?
+        .get::<i64, _>("count");
+
+        if line_count > 0 {
+            transaction.rollback().await?;
+            return Err(anyhow::anyhow!(
+                "Taloutta ei voi poistaa, koska sen jäseniin liittyy laskurivejä. Poista ensin laskut."
+            ));
+        }
+
         // First, delete all members in this household
         sqlx::query(
             "DELETE FROM members WHERE osoite_id IN (SELECT id FROM addresses WHERE talous_id = ?)",
         )
         .bind(id)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
 
         // Delete the address
         sqlx::query("DELETE FROM addresses WHERE talous_id = ?")
             .bind(id)
-            .execute(&self.pool)
+            .execute(&mut *transaction)
             .await?;
 
         // Delete the household
         sqlx::query("DELETE FROM households WHERE id = ?")
             .bind(id)
-            .execute(&self.pool)
+            .execute(&mut *transaction)
             .await?;
 
+        transaction.commit().await?;
         Ok(())
     }
 

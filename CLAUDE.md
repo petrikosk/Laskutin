@@ -8,7 +8,7 @@ Tauri-pohjainen jäsenmaksulaskutusohjelma SQLite-tietokannalla ja Vue.js-käytt
 - **Tietokanta**: SQLite
 - **Paketinhallinta**: pnpm
 - **Build system**: Vite
-- **PDF-generointi**: jsPDF + html2canvas
+- **PDF-generointi**: jsPDF (vektoripohjainen, src/utils/vectorPdfGenerator.ts)
 - **Viivakoodi**: JsBarcode
 - **Päivämääräpoiminta**: @vuepic/vue-datepicker
 
@@ -170,7 +170,7 @@ Frontend: camelCase ↔ Backend: snake_case
 - `household.vastaanottaja` käytetään PDF:ssä laskun saajan nimenä
 
 ### PDF-generointi
-- html2canvas + jsPDF
+- jsPDF (vektoripohjainen, ei html2canvas)
 - Backend commands for file operations (no frontend plugins)
 - Proper Finnish banking barcode generation
 - A4 size constraints ja single-page layout

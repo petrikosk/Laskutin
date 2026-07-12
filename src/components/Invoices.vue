@@ -110,10 +110,13 @@
             <td class="px-6 py-4 whitespace-nowrap">
               <span
                 class="badge"
-                :class="invoice.maksettu ? 'badge-success' : 'badge-warning'"
+                :class="invoice.maksettu ? 'badge-success' : (isOverdue(invoice) ? 'badge-danger' : 'badge-warning')"
               >
-                {{ invoice.maksettu ? 'Maksettu' : 'Avoin' }}
+                {{ invoice.maksettu ? 'Maksettu' : (isOverdue(invoice) ? 'Erääntynyt' : 'Avoin') }}
               </span>
+              <div v-if="invoice.maksettu && invoice.maksupaiva" class="text-xs text-gray-500 mt-1">
+                {{ formatDate(invoice.maksupaiva) }}
+              </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               <button
@@ -453,7 +456,7 @@ import PaymentDialog from './PaymentDialog.vue'
 import SuccessNotification from './SuccessNotification.vue'
 import AlertDialog from './AlertDialog.vue'
 import { generateVectorInvoicePDF, generatePrintablePDF } from '../utils/vectorPdfGenerator'
-import { formatDate, getDateInFutureYYYYMMDD } from '../utils/dateUtils'
+import { formatDate, getDateInFutureYYYYMMDD, getTodayYYYYMMDD } from '../utils/dateUtils'
 
 interface Invoice {
   id: number
@@ -552,6 +555,24 @@ const formatCurrency = (amount: number) => {
   }).format(amount)
 }
 
+const isOverdue = (invoice: Invoice) => {
+  return !invoice.maksettu && invoice.erapaiva < getTodayYYYYMMDD()
+}
+
+// Normalisoi pankin CSV-päivämäärä (pp.kk.vvvv tai vvvv-kk-pp) muotoon vvvv-kk-pp
+const normalizeCsvDate = (dateStr: string): string | null => {
+  const trimmed = (dateStr || '').trim()
+  const finnish = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/)
+  if (finnish) {
+    return `${finnish[3]}-${finnish[2].padStart(2, '0')}-${finnish[1].padStart(2, '0')}`
+  }
+  const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) {
+    return `${iso[1]}-${iso[2]}-${iso[3]}`
+  }
+  return null
+}
+
 
 const openCreateInvoicesModal = () => {
   showCreateModal.value = true
@@ -603,7 +624,10 @@ const createInvoices = async () => {
       onConfirm: async () => {
         try {
           // Luo laskut vasta vahvistuksen jälkeen
-          const createdInvoices = await invoke('create_invoice_for_year', { year: invoiceForm.value.year }) as any[]
+          const createdInvoices = await invoke('create_invoice_for_year', {
+            year: invoiceForm.value.year,
+            dueDate: invoiceForm.value.dueDate
+          }) as any[]
           await loadInvoices()
           closeCreateModal()
           showSuccessNotification(
@@ -748,7 +772,7 @@ const deleteInvoice = async (invoice: Invoice) => {
         await loadInvoices()
       } catch (error) {
         console.error('Virhe poistaessa laskua:', error)
-        errorMessage.value = 'Virhe poistaessa laskua'
+        errorMessage.value = 'Virhe poistaessa laskua: ' + String(error)
         showErrorDialog.value = true
       }
     }
@@ -827,16 +851,18 @@ const handleFileUpload = async (event: Event) => {
     // Poista ensimmäinen rivi (header)
     const dataLines = lines.slice(1)
     
+    // Poista sarakkeen ympäriltä lainausmerkit ja välilyönnit
+    const cleanColumn = (value?: string) => (value ?? '').trim().replace(/^"|"$/g, '').trim()
+
     csvData.value = dataLines.map((line, index) => {
-      // Käsittele CSV-parsinta (simple split, ei käsittele quotes)
       const columns = line.split(';')
       return {
         id: index,
-        date: columns[0]?.trim(),
-        payer: columns[1]?.trim(),
-        reference: columns[2]?.trim(),
-        description: columns[3]?.trim(),
-        amount: parseFloat(columns[4]?.trim()?.replace(',', '.') || '0')
+        date: cleanColumn(columns[0]),
+        payer: cleanColumn(columns[1]),
+        reference: cleanColumn(columns[2]).replace(/\s/g, '').replace(/^0+/, ''),
+        description: cleanColumn(columns[3]),
+        amount: parseFloat(cleanColumn(columns[4]).replace(/\s/g, '').replace(',', '.') || '0')
       }
     }).filter(row => row.date && row.payer) // Suodata tyhjät rivit
     
@@ -916,10 +942,9 @@ const processSelectedPayments = async () => {
         
         for (const payment of paymentsToProcess) {
           try {
-            // Muunna päivämäärä oikeaan muotoon (YYYY-MM-DD)
-            const dateParts = payment.date.split('-') // 2025-05-27 -> [2025, 05, 27]
-            const formattedDate = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`
-            
+            // Muunna päivämäärä muotoon YYYY-MM-DD; jos ei tunnisteta, käytä tätä päivää
+            const formattedDate = normalizeCsvDate(payment.date) || getTodayYYYYMMDD()
+
             await invoke('mark_invoice_paid', {
               id: payment.invoice.id,
               paymentDate: formattedDate

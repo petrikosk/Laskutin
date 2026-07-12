@@ -134,6 +134,20 @@
                 placeholder="esim. Korhosen perhe"
               />
             </div>
+
+            <!-- Laskun vastaanottaja -->
+            <div>
+              <label class="form-label">Laskun vastaanottaja</label>
+              <input
+                v-model="householdForm.vastaanottaja"
+                type="text"
+                class="form-input"
+                placeholder="esim. Matti Korhonen"
+              />
+              <div class="text-xs text-gray-500 mt-1">
+                Nimi, joka tulostetaan laskulle saajaksi. Jos tyhjä, käytetään talouden nimeä.
+              </div>
+            </div>
             
             <!-- Osoitetiedot -->
             <div class="space-y-4">
@@ -235,6 +249,7 @@ interface Address {
 interface Household {
   id: number
   talouden_nimi: string | null
+  vastaanottaja: string | null
   laskutusosoite_sama: boolean
   laskutusosoite_id: number | null
   created_at: string
@@ -258,6 +273,7 @@ const householdToDelete = ref<Household | null>(null)
 // Form data
 const householdForm = ref({
   talouden_nimi: '',
+  vastaanottaja: '',
   katuosoite: '',
   postinumero: '',
   postitoimipaikka: '',
@@ -289,6 +305,7 @@ const openAddModal = () => {
   validationError.value = ''
   householdForm.value = {
     talouden_nimi: '',
+    vastaanottaja: '',
     katuosoite: '',
     postinumero: '',
     postitoimipaikka: '',
@@ -301,6 +318,7 @@ const editHousehold = (household: Household) => {
   validationError.value = ''
   householdForm.value = {
     talouden_nimi: household.talouden_nimi || '',
+    vastaanottaja: household.vastaanottaja || '',
     katuosoite: household.address?.katuosoite || '',
     postinumero: household.address?.postinumero || '',
     postitoimipaikka: household.address?.postitoimipaikka || '',
@@ -333,17 +351,18 @@ const saveHousehold = async () => {
   }
 
   try {
+    const householdData = {
+      ...householdForm.value,
+      talouden_nimi: householdForm.value.talouden_nimi.trim() || null,
+      vastaanottaja: householdForm.value.vastaanottaja.trim() || null,
+    }
     if (editingHousehold.value) {
-      console.log('Update household:', editingHousehold.value.id, householdForm.value)
       await invoke('update_household_with_address', {
         id: editingHousehold.value.id,
-        householdData: householdForm.value
+        householdData
       })
     } else {
-      console.log('Create household:', householdForm.value)
-      await invoke('create_household_with_address', { 
-        householdData: householdForm.value 
-      })
+      await invoke('create_household_with_address', { householdData })
     }
     await loadHouseholds()
     closeModal()
@@ -391,6 +410,7 @@ const loadHouseholds = async () => {
     households.value = (householdsData as any[]).map((item: any) => ({
       id: item.id,
       talouden_nimi: item.talouden_nimi,
+      vastaanottaja: item.vastaanottaja ?? null,
       laskutusosoite_sama: true,
       laskutusosoite_id: null,
       created_at: item.created_at,

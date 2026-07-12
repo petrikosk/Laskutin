@@ -274,10 +274,14 @@
                   v-model="memberForm.osoitetyyppi"
                   class="form-select"
                 >
+                  <option v-if="editingMember" value="keep">Nykyinen osoite (muokkaa tarvittaessa)</option>
                   <option value="oma">Oma osoite (yhden hengen talous)</option>
                   <option value="talous">Liity olemassa olevaan talouteen</option>
                   <option value="uusi">Luo uusi talous</option>
                 </select>
+                <div v-if="editingMember && memberForm.osoitetyyppi !== 'keep'" class="text-xs text-gray-500 mt-1">
+                  Huom: jäsen siirretään pois nykyisestä taloudestaan
+                </div>
               </div>
               
               <!-- Liity olemassa olevaan talouteen -->
@@ -310,8 +314,8 @@
                 </div>
               </div>
               
-              <!-- Osoitetiedot (oma osoite tai uusi talous) -->
-              <div v-if="memberForm.osoitetyyppi === 'oma' || memberForm.osoitetyyppi === 'uusi'" class="space-y-4">
+              <!-- Osoitetiedot (nykyinen, oma osoite tai uusi talous) -->
+              <div v-if="memberForm.osoitetyyppi === 'oma' || memberForm.osoitetyyppi === 'uusi' || memberForm.osoitetyyppi === 'keep'" class="space-y-4">
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div class="sm:col-span-2">
                     <label class="form-label">Katuosoite *</label>
@@ -461,7 +465,8 @@ const memberForm = ref({
   jasentyyppi: 'Varsinainen',
   aktiivinen: true,
   // Osoite/talous tiedot
-  osoitetyyppi: 'oma' as 'oma' | 'talous' | 'uusi', // oma=pelkka osoite, talous=liity olemassa olevaan, uusi=luo uusi talous
+  // keep=säilytä nykyinen (vain muokkaus), oma=oma talous, talous=liity olemassa olevaan, uusi=luo uusi talous
+  osoitetyyppi: 'oma' as 'keep' | 'oma' | 'talous' | 'uusi',
   talous_id: null as number | null,
   talouden_nimi: '',
   katuosoite: '',
@@ -547,20 +552,6 @@ const editMember = (member: Member) => {
   if (jasentyyppi === 'kunnia') jasentyyppi = 'Kunnia'
   if (jasentyyppi === 'nuorisojasen') jasentyyppi = 'Nuorisojasen'
   
-  // Determine address type based on household data
-  let osoitetyyppi = 'oma'
-  let talous_id = null
-  
-  // If member has a household name that's not just their own name, they're in a shared household
-  if (member.talouden_nimi && member.talouden_nimi !== `${member.etunimi} ${member.sukunimi}`) {
-    osoitetyyppi = 'talous'
-    // Find the household ID from taloudet list
-    const talous = taloudet.value.find(t => t.talouden_nimi === member.talouden_nimi)
-    if (talous) {
-      talous_id = talous.id
-    }
-  }
-  
   memberForm.value = {
     etunimi: member.etunimi,
     sukunimi: member.sukunimi,
@@ -570,9 +561,9 @@ const editMember = (member: Member) => {
     liittymispaiva: new Date(member.liittymispaiva),
     jasentyyppi: jasentyyppi,
     aktiivinen: member.aktiivinen,
-    // Fill address fields from member data
-    osoitetyyppi: osoitetyyppi as 'oma' | 'talous' | 'uusi',
-    talous_id: talous_id,
+    // Oletuksena säilytetään nykyinen osoite ja talous; osoitteen voi muokata paikallaan
+    osoitetyyppi: 'keep',
+    talous_id: null,
     talouden_nimi: member.talouden_nimi || '',
     katuosoite: member.katuosoite || '',
     postinumero: member.postinumero || '',
@@ -621,7 +612,7 @@ const saveMember = async () => {
     return
   }
   
-  if ((memberForm.value.osoitetyyppi === 'oma' || memberForm.value.osoitetyyppi === 'uusi')) {
+  if (memberForm.value.osoitetyyppi === 'oma' || memberForm.value.osoitetyyppi === 'uusi' || memberForm.value.osoitetyyppi === 'keep') {
     if (!memberForm.value.katuosoite.trim()) {
       validationError.value = 'Katuosoite on pakollinen.'
       return

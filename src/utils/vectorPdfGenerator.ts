@@ -89,7 +89,7 @@ const createInvoicePDF = (data: VectorInvoiceData): jsPDF => {
   pdf.setFont('helvetica', 'bold')
   pdf.text('Laskun numero:', rightCol, rightY)
   pdf.setFont('helvetica', 'normal')
-  pdf.text(String(invoice?.id || ''), rightCol + spacing, rightY)
+  pdf.text(String(invoice?.laskunumero || invoice?.id || ''), rightCol + spacing, rightY)
   rightY += 7
 
   pdf.setFont('helvetica', 'bold')

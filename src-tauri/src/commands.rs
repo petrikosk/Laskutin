@@ -274,6 +274,7 @@ pub async fn get_households_with_addresses(db: State<'_, DbState>) -> Result<Vec
         result.push(serde_json::json!({
             "id": household.id,
             "talouden_nimi": household.talouden_nimi,
+            "vastaanottaja": household.vastaanottaja,
             "osoite": format!("{}, {} {}", address.katuosoite, address.postinumero, address.postitoimipaikka),
             "member_count": member_count,
             "created_at": household.created_at,
@@ -450,9 +451,18 @@ pub async fn validate_invoice_creation(
 pub async fn create_invoice_for_year(
     db: State<'_, DbState>,
     year: i32,
+    due_date: Option<String>,
 ) -> Result<Vec<Invoice>, String> {
+    let due_date = match due_date {
+        Some(s) if !s.is_empty() => Some(
+            chrono::NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+                .map_err(|e| format!("Virheellinen eräpäivä: {}", e))?,
+        ),
+        _ => None,
+    };
+
     let db = db.lock().await;
-    db.create_invoice_for_year(year)
+    db.create_invoice_for_year(year, due_date)
         .await
         .map_err(|e| e.to_string())
 }
@@ -548,14 +558,10 @@ pub async fn backup_database(
 ) -> Result<String, String> {
     use std::fs;
     use std::path::PathBuf;
-    
+
     // Get the database path (same logic as in Database::new())
-    let app_data_dir = dirs::data_dir()
-        .map(|dir| dir.join("laskutin"))
-        .unwrap_or_else(|| PathBuf::from("."));
-    
-    let db_path = app_data_dir.join("laskutin.db");
-    
+    let db_path = Database::get_current_database_path().map_err(|e| e.to_string())?;
+
     if !db_path.exists() {
         return Err("Database file does not exist".to_string());
     }
@@ -587,12 +593,8 @@ pub async fn restore_database(
     }
     
     // Get the current database path
-    let app_data_dir = dirs::data_dir()
-        .map(|dir| dir.join("laskutin"))
-        .unwrap_or_else(|| PathBuf::from("."));
-    
-    let db_path = app_data_dir.join("laskutin.db");
-    
+    let db_path = Database::get_current_database_path().map_err(|e| e.to_string())?;
+
     // Close the current database connections properly
     {
         let db_guard = db.lock().await;

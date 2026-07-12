@@ -2075,7 +2075,7 @@ dependencies = [
 
 [[package]]
 name = "laskutin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2086,11 +2086,8 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
- "tauri-plugin-fs",
  "tauri-plugin-opener",
- "thiserror 2.0.12",
  "tokio",
- "uuid",
 ]
 
 [[package]]
@@ -3940,7 +3937,6 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
- "uuid",
 ]
 
 [[package]]
@@ -4021,7 +4017,6 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.12",
  "tracing",
- "uuid",
  "whoami",
 ]
 
@@ -4060,7 +4055,6 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.12",
  "tracing",
- "uuid",
  "whoami",
 ]
 
@@ -4087,7 +4081,6 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "url",
- "uuid",
 ]
 
 [[package]]

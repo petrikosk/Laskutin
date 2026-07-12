@@ -52,6 +52,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import DateInput from './DateInput.vue'
+import { getTodayYYYYMMDD } from '../utils/dateUtils'
 
 interface Props {
   show: boolean
@@ -71,7 +72,7 @@ const paymentDate = ref<string>('')
 // Set default payment date to today when dialog opens
 watch(() => props.show, (isVisible) => {
   if (isVisible) {
-    paymentDate.value = new Date().toISOString().split('T')[0]
+    paymentDate.value = getTodayYYYYMMDD()
   } else {
     paymentDate.value = ''
   }
