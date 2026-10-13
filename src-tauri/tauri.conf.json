@@ -30,7 +30,10 @@
       "msi",
       "nsis",
       "deb",
-      "appimage"
+      "rpm",
+      "appimage",
+      "app",
+      "dmg"
     ],
     "publisher": "Petri Koskinen",
     "icon": [

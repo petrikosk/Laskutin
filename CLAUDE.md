@@ -102,6 +102,9 @@ npm run dev
 # Backend build
 cd src-tauri && cargo build
 
+# Release: v*-tagin push rakentaa paketit (msi, exe, deb, rpm, AppImage, dmg)
+# GitHub-releaseen (.github/workflows/release.yml)
+
 # Tietokanta migraatiot (automaattisesti)
 # migrations/001_initial.sql
 # migrations/002_add_fields.sql
@@ -184,7 +187,10 @@ Frontend: camelCase ↔ Backend: snake_case
 
 ## Tietokantapolut
 - **Kehitys (debug)**: `dev-database.db` (paikallinen)
-- **Tuotanto (release)**: `~/.local/share/laskutin/laskutin.db` (Linux/WSL)
+- **Tuotanto (release)**: `laskutin/laskutin.db` käyttöjärjestelmän datahakemistossa
+  - Linux/WSL: `~/.local/share/laskutin/`
+  - Windows: `%APPDATA%\laskutin\`
+  - macOS: `~/Library/Application Support/laskutin/`
 - Automaattinen valinta build-moden perusteella
 - `get_database_info` komento näyttää käytössä olevan tietokannan
 
