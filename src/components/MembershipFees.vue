@@ -279,7 +279,7 @@ const feeForm = ref({
 
 const filteredFees = computed(() => {
   return fees.value.filter(fee => {
-    const matchesYear = !filterYear.value || fee.vuosi.toString() === filterYear.value
+    const matchesYear = !filterYear.value || String(fee.vuosi) === String(filterYear.value)
     const matchesType = !filterType.value || fee.jasentyyppi === filterType.value
     
     return matchesYear && matchesType

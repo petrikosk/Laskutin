@@ -50,52 +50,78 @@ impl Database {
             .connect(&db_url)
             .await?;
 
-        // Run migrations manually - log errors but continue if table/column already exists
-        if let Err(e) = sqlx::query(include_str!("../migrations/001_initial.sql"))
-            .execute(&pool)
-            .await
-        {
-            // Only log if it's not a "table already exists" error
-            let err_str = e.to_string();
-            if !err_str.contains("already exists") {
-                eprintln!("Migration 001 warning: {}", err_str);
-            }
-        }
-
-        // Run second migration
-        if let Err(e) = sqlx::query(include_str!("../migrations/002_add_fields.sql"))
-            .execute(&pool)
-            .await
-        {
-            let err_str = e.to_string();
-            if !err_str.contains("duplicate column") && !err_str.contains("already exists") {
-                eprintln!("Migration 002 warning: {}", err_str);
-            }
-        }
-
-        // Run third migration
-        if let Err(e) = sqlx::query(include_str!("../migrations/003_add_youth_member_age_limit.sql"))
-            .execute(&pool)
-            .await
-        {
-            let err_str = e.to_string();
-            if !err_str.contains("duplicate column") && !err_str.contains("already exists") {
-                eprintln!("Migration 003 warning: {}", err_str);
-            }
-        }
-
-        // Run fourth migration
-        if let Err(e) = sqlx::query(include_str!("../migrations/004_update_member_type_constraints.sql"))
-            .execute(&pool)
-            .await
-        {
-            let err_str = e.to_string();
-            if !err_str.contains("already exists") {
-                eprintln!("Migration 004 warning: {}", err_str);
-            }
-        }
+        Self::run_migrations(&pool).await?;
 
         Ok(Database { pool })
+    }
+
+    /// Ajaa migraatiot. Versio seurataan PRAGMA user_version -arvolla, jotta
+    /// migraatiot (ja niiden esimerkkidata) ajetaan vain kerran.
+    async fn run_migrations(pool: &Pool<Sqlite>) -> Result<()> {
+        let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+            .fetch_one(pool)
+            .await?;
+
+        if version < 1 {
+            // Vanhat migraatiot 001-003 eivät ole idempotentteja, joten virheet
+            // "already exists"/"duplicate column" tarkoittavat jo ajettua migraatiota
+            let legacy = [
+                ("001", include_str!("../migrations/001_initial.sql")),
+                ("002", include_str!("../migrations/002_add_fields.sql")),
+                ("003", include_str!("../migrations/003_add_youth_member_age_limit.sql")),
+            ];
+            for (name, sql) in legacy {
+                if let Err(e) = sqlx::query(sql).execute(pool).await {
+                    let err_str = e.to_string();
+                    if !err_str.contains("duplicate column") && !err_str.contains("already exists") {
+                        eprintln!("Migration {} warning: {}", name, err_str);
+                    }
+                }
+            }
+
+            Self::migrate_member_type_constraints(pool).await?;
+
+            sqlx::query("PRAGMA user_version = 1").execute(pool).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Migraatio 004: taulujen uudelleenluonti nuorisojasen-tyypin CHECK-ehdolla.
+    /// Ajetaan vain, jos members-taulu ei vielä salli nuorisojäsentä.
+    async fn migrate_member_type_constraints(pool: &Pool<Sqlite>) -> Result<()> {
+        let members_sql: Option<String> = sqlx::query_scalar(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'members'",
+        )
+        .fetch_optional(pool)
+        .await?;
+        if members_sql.map_or(true, |sql| sql.contains("nuorisojasen")) {
+            return Ok(());
+        }
+
+        // Viiteavaimet pois päältä taulujen uudelleenluonnin ajaksi, muuten
+        // DROP TABLE members epäonnistuu kun laskurivit viittaavat jäseniin.
+        // PRAGMA ei vaikuta transaktion sisällä, joten asetetaan se samalle yhteydelle ennen sitä.
+        let mut conn = pool.acquire().await?;
+        sqlx::query("PRAGMA foreign_keys = OFF").execute(&mut *conn).await?;
+
+        let result = async {
+            let mut tx = sqlx::Connection::begin(&mut *conn).await?;
+            // Aiempien epäonnistuneiden ajojen jäämät
+            sqlx::query("DROP TABLE IF EXISTS members_new; DROP TABLE IF EXISTS membership_fees_new;")
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query(include_str!("../migrations/004_update_member_type_constraints.sql"))
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
+            Ok::<_, sqlx::Error>(())
+        }
+        .await;
+
+        sqlx::query("PRAGMA foreign_keys = ON").execute(&mut *conn).await?;
+        result?;
+        Ok(())
     }
 
     pub async fn close(&self) {
@@ -747,12 +773,31 @@ impl Database {
         Ok(invoices_with_details)
     }
 
-    pub async fn validate_invoice_creation(&self, year: i32) -> Result<String> {
-        // Tarkista että jäsenmaksut on määritelty kaikille jäsentyypeille
-        let member_types =
-            sqlx::query("SELECT DISTINCT jasentyyppi FROM members WHERE aktiivinen = 1")
-                .fetch_all(&self.pool)
-                .await?;
+    /// Tarkistaa, että kaikille aktiivisten jäsenten jäsentyypeille on jäsenmaksu
+    /// vuodelle. `apply_age_conversion` huomioi ikärajan täyttäneet nuorisojäsenet
+    /// varsinaisina jäseninä (laskujen luonti muuntaa heidät ennen laskutusta).
+    async fn check_membership_fees_defined(&self, year: i32, apply_age_conversion: bool) -> Result<()> {
+        let age_limit: i64 = if apply_age_conversion {
+            self.get_organization()
+                .await?
+                .map(|org| org.nuorisojasen_ikaraja as i64)
+                .unwrap_or(i64::MAX)
+        } else {
+            i64::MAX
+        };
+
+        let member_types = sqlx::query(
+            "SELECT DISTINCT CASE
+                 WHEN jasentyyppi = 'nuorisojasen'
+                      AND syntymaaika IS NOT NULL
+                      AND (? - strftime('%Y', syntymaaika)) >= ?
+                 THEN 'varsinainen' ELSE jasentyyppi END AS jasentyyppi
+             FROM members WHERE aktiivinen = 1",
+        )
+        .bind(year)
+        .bind(age_limit)
+        .fetch_all(&self.pool)
+        .await?;
 
         let mut missing_fees = Vec::new();
         for type_row in member_types {
@@ -780,6 +825,14 @@ impl Database {
             ));
         }
 
+        Ok(())
+    }
+
+    pub async fn validate_invoice_creation(&self, year: i32) -> Result<String> {
+        // Nuorisojäsenet, jotka laskutusvuonna täyttävät ikärajan, laskutetaan
+        // varsinaisina jäseninä, joten maksut tarkistetaan muunnoksen mukaisilla tyypeillä
+        self.check_membership_fees_defined(year, true).await?;
+
         // Tarkista että on aktiivisia jäseniä
         let active_members =
             sqlx::query("SELECT COUNT(*) as count FROM members WHERE aktiivinen = 1")
@@ -802,7 +855,7 @@ impl Database {
              AND NOT EXISTS (
                  SELECT 1 FROM invoices i 
                  WHERE i.talous_id = h.id 
-                 AND strftime('%Y', i.luontipaiva) = CAST(? as TEXT)
+                 AND substr(i.viitenumero, 1, 4) = CAST(? as TEXT)
              )",
         )
         .bind(year)
@@ -814,7 +867,7 @@ impl Database {
         // Tarkista onko jo kaikille luotu laskut
         let existing_invoices = sqlx::query(
             "SELECT COUNT(*) as count FROM invoices 
-             WHERE strftime('%Y', luontipaiva) = CAST(? as TEXT)",
+             WHERE substr(viitenumero, 1, 4) = CAST(? as TEXT)",
         )
         .bind(year)
         .fetch_one(&self.pool)
@@ -884,6 +937,8 @@ impl Database {
     ) -> Result<Vec<Invoice>> {
         // Aja jäsentyyppien päivitys ensin
         let _ = self.update_member_types_by_age(year).await?;
+        // Varmista maksut muunnoksen jälkeen: puuttuva maksu tuottaisi 0 € laskurivin
+        self.check_membership_fees_defined(year, false).await?;
         // Hae vain ne taloudet joilla ei ole vielä laskua tälle vuodelle
         let households = sqlx::query(
             "SELECT DISTINCT h.id as household_id, h.talouden_nimi, h.vastaanottaja
@@ -894,15 +949,17 @@ impl Database {
              AND NOT EXISTS (
                  SELECT 1 FROM invoices i 
                  WHERE i.talous_id = h.id 
-                 AND strftime('%Y', i.luontipaiva) = CAST(? as TEXT)
+                 AND substr(i.viitenumero, 1, 4) = CAST(? as TEXT)
              )",
         )
         .bind(year)
         .fetch_all(&self.pool)
         .await?;
 
+        // Kaikki laskut luodaan yhdessä transaktiossa, ettei virhe jätä puolikasta ajoa
+        let mut tx = self.pool.begin().await?;
         let mut created_invoices = Vec::new();
-        let current_date = chrono::Utc::now().date_naive();
+        let current_date = chrono::Local::now().date_naive();
         let due_date = due_date.unwrap_or_else(|| current_date + chrono::Duration::days(30));
 
         for household_row in households {
@@ -919,7 +976,7 @@ impl Database {
             )
             .bind(year)
             .bind(household_id)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *tx)
             .await?;
 
             // Laske kokonaissumma
@@ -933,6 +990,8 @@ impl Database {
                     }
                 })
                 .sum();
+            // Pyöristä senteiksi, ettei liukulukusumma tallennu muodossa 36.900000000000006
+            let total_sum = (total_sum * 100.0).round() / 100.0;
 
             if total_sum <= 0.0 {
                 continue; // Ei laskutettavaa
@@ -955,7 +1014,7 @@ impl Database {
             .bind(total_sum)
             .bind(&reference_number)
             .bind(&invoice_number)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?
             .last_insert_rowid();
 
@@ -978,7 +1037,7 @@ impl Database {
                 .bind(member_id)
                 .bind(&description)
                 .bind(member_fee)
-                .execute(&self.pool)
+                .execute(&mut *tx)
                 .await?;
             }
 
@@ -1000,6 +1059,7 @@ impl Database {
             created_invoices.push(invoice);
         }
 
+        tx.commit().await?;
         Ok(created_invoices)
     }
 

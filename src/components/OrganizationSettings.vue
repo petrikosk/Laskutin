@@ -112,7 +112,7 @@
               <input
                 v-model="organizationForm.pankkitili"
                 type="text"
-                pattern="FI[0-9]{16}|FI[0-9]{2}( [0-9]{4}){4} [0-9]{2}"
+                pattern="FI[0-9]{16}|FI[0-9]{2}( [0-9]{4}){3} [0-9]{2}"
                 data-field-name="pankkitili"
                 @invalid="handleInvalidInput"
                 @input="(event) => (event.target as HTMLInputElement).setCustomValidity('')"

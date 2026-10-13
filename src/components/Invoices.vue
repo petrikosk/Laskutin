@@ -393,7 +393,10 @@
                       <td class="px-4 py-2 text-sm text-gray-900">{{ payment.date }}</td>
                       <td class="px-4 py-2 text-sm text-gray-900">{{ payment.reference }}</td>
                       <td class="px-4 py-2 text-sm text-gray-900">{{ payment.payer }}</td>
-                      <td class="px-4 py-2 text-sm text-gray-900">{{ formatCurrency(payment.amount) }}</td>
+                      <td class="px-4 py-2 text-sm text-gray-900">
+                        {{ formatCurrency(payment.amount) }}
+                        <div v-if="payment.underpaid" class="text-xs text-red-600">Vajaa maksu</div>
+                      </td>
                       <td class="px-4 py-2 text-sm text-gray-900">
                         <span class="text-green-600">{{ payment.invoice.talouden_nimi || 'Nimetön talous' }}</span>
                         <div class="text-xs text-gray-500">{{ formatCurrency(payment.invoice.summa) }}</div>
@@ -524,8 +527,9 @@ const filteredInvoices = computed(() => {
     const matchesSearch = !searchTerm.value || 
       invoice.viitenumero.includes(searchTerm.value)
     
+    // Laskutusvuosi on viitenumeron neljä ensimmäistä merkkiä
     const matchesYear = !filterYear.value || 
-      new Date(invoice.luontipaiva).getFullYear().toString() === filterYear.value
+      invoice.viitenumero.slice(0, 4) === String(filterYear.value)
     
     const matchesStatus = !filterStatus.value || 
       (filterStatus.value === 'paid' && invoice.maksettu) ||
@@ -901,9 +905,12 @@ const findMatchingPayments = () => {
       console.log(`Checking reference ${row.reference}, found invoice:`, !!matchingInvoice)
       
       if (matchingInvoice) {
+        // Vajaata maksua ei kuitata automaattisesti
+        const underpaid = Math.round(row.amount * 100) < Math.round(matchingInvoice.summa * 100)
         return {
           ...row,
-          selected: true, // Valitse automaattisesti
+          selected: !underpaid,
+          underpaid,
           invoice: matchingInvoice
         }
       }

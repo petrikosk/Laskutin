@@ -51,7 +51,11 @@ const dateValue = ref<Date | null>(null)
 watch(() => props.modelValue, (newValue) => {
   if (newValue) {
     if (typeof newValue === 'string') {
-      dateValue.value = new Date(newValue)
+      // new Date('YYYY-MM-DD') tulkitaan UTC:nä, joten jäsennetään paikallisena päivänä
+      const match = newValue.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+      dateValue.value = match
+        ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+        : new Date(newValue)
     } else {
       dateValue.value = newValue
     }

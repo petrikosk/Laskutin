@@ -162,7 +162,7 @@ const createInvoicePDF = (data: VectorInvoiceData): jsPDF => {
   yPos += 10
 
   pdf.setFont('helvetica', 'normal')
-  pdf.text(`Saajan tilinumero: ${organization?.pankkitili || 'FI0000000000000000'}`, margin, yPos)
+  pdf.text(`Saajan tilinumero: ${organization?.pankkitili || '(tilinumero puuttuu)'}`, margin, yPos)
   yPos += 6
   if (organization?.bic) {
     pdf.text(`BIC: ${organization.bic}`, margin, yPos)
@@ -250,26 +250,14 @@ function generateBarcodeString(invoice: any, organization: any): string {
   try {
     console.log('=== VECTOR PDF BARCODE GENERATION ===')
 
-    // Use correct 54-character logic
-    const iban = (organization.pankkitili || 'FI1410093000123458').replace(/\s/g, '').toUpperCase()
-    console.log('IBAN:', iban)
-
-    // Process IBAN to get exactly 16 digits (for 54-char total)
-    let ibanWithoutCountry
-    if (iban.startsWith('FI') && iban.length === 18) {
-      ibanWithoutCountry = iban.slice(2) // Remove FI -> 16 digits
-    } else {
-      ibanWithoutCountry = '1410093000123458' // 16 digits fallback
+    // Virtuaaliviivakoodi vaatii suomalaisen IBANin (FI + 16 numeroa).
+    // Ei koskaan varatiliä: väärä tilinumero ohjaisi maksut väärälle saajalle.
+    const iban = (organization.pankkitili || '').replace(/\s/g, '').toUpperCase()
+    if (!/^FI\d{16}$/.test(iban)) {
+      console.warn('Virheellinen tai puuttuva IBAN, viivakoodia ei luoda:', iban)
+      return ''
     }
-
-    if (ibanWithoutCountry.length !== 16) {
-      console.warn('IBAN part wrong length:', ibanWithoutCountry.length, 'adjusting to 16')
-      if (ibanWithoutCountry.length > 16) {
-        ibanWithoutCountry = ibanWithoutCountry.slice(-16)
-      } else {
-        ibanWithoutCountry = ibanWithoutCountry.padStart(16, '0')
-      }
-    }
+    const ibanWithoutCountry = iban.slice(2)
 
     const amount = invoice.summa || 0
     const safeAmount = Math.min(Math.max(Math.abs(amount), 0), 999999.99)
@@ -280,14 +268,9 @@ function generateBarcodeString(invoice: any, organization: any): string {
     const paddedReference = reference.padStart(20, '0')
 
     let dueDate = '000000'
-    if (invoice.erapaiva) {
-      const date = new Date(invoice.erapaiva)
-      if (!isNaN(date.getTime())) {
-        const yy = date.getFullYear().toString().slice(-2)
-        const mm = (date.getMonth() + 1).toString().padStart(2, '0')
-        const dd = date.getDate().toString().padStart(2, '0')
-        dueDate = yy + mm + dd
-      }
+    const dueMatch = String(invoice.erapaiva || '').match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (dueMatch) {
+      dueDate = dueMatch[1].slice(-2) + dueMatch[2] + dueMatch[3]
     }
 
     // Generate 54-character barcode

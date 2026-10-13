@@ -113,7 +113,7 @@ pub async fn create_member_with_address(
     
     let liittymispaiva = memberData["liittymispaiva"].as_str()
         .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
-        .unwrap_or_else(|| chrono::Utc::now().date_naive());
+        .unwrap_or_else(|| chrono::Local::now().date_naive());
     
     let member = CreateMember {
         etunimi: memberData["etunimi"].as_str().unwrap_or("").to_string(),
@@ -225,7 +225,7 @@ pub async fn update_member_with_address(
     
     let liittymispaiva = memberData["liittymispaiva"].as_str()
         .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
-        .unwrap_or_else(|| chrono::Utc::now().date_naive());
+        .unwrap_or_else(|| chrono::Local::now().date_naive());
     
     let member = CreateMember {
         etunimi: memberData["etunimi"].as_str().unwrap_or("").to_string(),

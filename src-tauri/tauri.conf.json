@@ -1,6 +1,6 @@
 {
   "productName": "Laskutin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "fi.yhdistys.laskutin",
   "build": {
     "beforeDevCommand": "pnpm dev",
